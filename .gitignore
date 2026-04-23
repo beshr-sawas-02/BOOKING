@@ -1,0 +1,41 @@
+# Node.js
+node_modules/
+dist/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables (مهم جداً)
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Build files
+coverage/
+
+# Prisma
+prisma/*.db
+prisma/*.db-journal
+
+# Python (لأن عندك passport_ai.py)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+venv/
+.env.python
+
+# Misc
+*.tmp
+*.swp
