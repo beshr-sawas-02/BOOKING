@@ -24,7 +24,9 @@ let PassportsService = class PassportsService {
         this.cloudinary = cloudinary;
         this.aiService = aiService;
     }
-    db() { return this.prisma; }
+    db() {
+        return this.prisma;
+    }
     async create(userId, dto) {
         const participant = await this.db().bookingParticipant.findUnique({
             where: { participant_id: BigInt(dto.participant_id) },
@@ -42,7 +44,9 @@ let PassportsService = class PassportsService {
                 participant_id: undefined,
                 user_id: BigInt(userId),
                 passport_number: dto.passport_number,
-                date_of_birth: dto.date_of_birth ? new Date(dto.date_of_birth) : undefined,
+                date_of_birth: dto.date_of_birth
+                    ? new Date(dto.date_of_birth)
+                    : undefined,
                 issue_date: dto.issue_date ? new Date(dto.issue_date) : undefined,
                 expiry_date: dto.expiry_date ? new Date(dto.expiry_date) : undefined,
             },
@@ -102,7 +106,11 @@ let PassportsService = class PassportsService {
             where: { passport_id: BigInt(passportId), image_type: imageType },
         });
         const image = await this.db().passportImage.create({
-            data: { passport_id: BigInt(passportId), image_url: url, image_type: imageType },
+            data: {
+                passport_id: BigInt(passportId),
+                image_url: url,
+                image_type: imageType,
+            },
         });
         if (imageType === enums_1.ImageType.FRONT) {
             try {
@@ -155,7 +163,9 @@ let PassportsService = class PassportsService {
             where: { passport_id: BigInt(id) },
             data: {
                 ...dto,
-                date_of_birth: dto.date_of_birth ? new Date(dto.date_of_birth) : undefined,
+                date_of_birth: dto.date_of_birth
+                    ? new Date(dto.date_of_birth)
+                    : undefined,
                 issue_date: dto.issue_date ? new Date(dto.issue_date) : undefined,
                 expiry_date: dto.expiry_date ? new Date(dto.expiry_date) : undefined,
             },
@@ -178,9 +188,15 @@ let PassportsService = class PassportsService {
                 participant_id: undefined,
                 ai_extracted: true,
                 extraction_confidence: confidence,
-                date_of_birth: extractedData.date_of_birth ? new Date(extractedData.date_of_birth) : undefined,
-                issue_date: extractedData.issue_date ? new Date(extractedData.issue_date) : undefined,
-                expiry_date: extractedData.expiry_date ? new Date(extractedData.expiry_date) : undefined,
+                date_of_birth: extractedData.date_of_birth
+                    ? new Date(extractedData.date_of_birth)
+                    : undefined,
+                issue_date: extractedData.issue_date
+                    ? new Date(extractedData.issue_date)
+                    : undefined,
+                expiry_date: extractedData.expiry_date
+                    ? new Date(extractedData.expiry_date)
+                    : undefined,
             },
         });
     }
@@ -191,9 +207,15 @@ let PassportsService = class PassportsService {
                 full_name_en: extracted.full_name_en,
                 nationality: extracted.nationality,
                 gender: extracted.gender,
-                date_of_birth: extracted.date_of_birth ? new Date(extracted.date_of_birth) : undefined,
-                issue_date: extracted.issue_date ? new Date(extracted.issue_date) : undefined,
-                expiry_date: extracted.expiry_date ? new Date(extracted.expiry_date) : undefined,
+                date_of_birth: extracted.date_of_birth
+                    ? new Date(extracted.date_of_birth)
+                    : undefined,
+                issue_date: extracted.issue_date
+                    ? new Date(extracted.issue_date)
+                    : undefined,
+                expiry_date: extracted.expiry_date
+                    ? new Date(extracted.expiry_date)
+                    : undefined,
                 ai_extracted: true,
                 extraction_confidence: extracted.confidence,
             };

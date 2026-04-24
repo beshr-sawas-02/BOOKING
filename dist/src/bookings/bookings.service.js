@@ -19,10 +19,9 @@ let BookingsService = class BookingsService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    db() { return this.prisma; }
     mahramValidator = new mahram_validator_1.MahramValidator();
     async create(userId, dto) {
-        const pkg = await this.db().package.findUnique({
+        const pkg = await this.prisma.package.findUnique({
             where: { package_id: BigInt(dto.package_id) },
         });
         if (!pkg)
@@ -34,8 +33,8 @@ let BookingsService = class BookingsService {
         const warnings = [];
         if (pkg.package_type === 'HAJJ') {
             const companions = dto.participants
-                .filter(p => !p.is_primary)
-                .map(p => ({
+                .filter((p) => !p.is_primary)
+                .map((p) => ({
                 relation_type: p.relation_type,
                 gender: p.gender || mahram_validator_1.Gender.MALE,
                 age: p.date_of_birth ? (0, mahram_validator_1.calcAge)(p.date_of_birth) : undefined,
@@ -57,22 +56,26 @@ let BookingsService = class BookingsService {
             }
             warnings.push(...(validationResult.warnings || []));
         }
-        const hasPrimary = dto.participants.some(p => p.is_primary);
+        const hasPrimary = dto.participants.some((p) => p.is_primary);
         if (!hasPrimary)
             dto.participants[0].is_primary = true;
         const totalPrice = Number(pkg.price_per_person) * dto.participants.length;
-        const booking = await this.db().booking.create({
+        const booking = await this.prisma.booking.create({
             data: {
                 user_id: BigInt(userId),
                 package_id: BigInt(dto.package_id),
                 total_price: totalPrice,
-                deposit_due_date: dto.deposit_due_date ? new Date(dto.deposit_due_date) : undefined,
+                deposit_due_date: dto.deposit_due_date
+                    ? new Date(dto.deposit_due_date)
+                    : undefined,
                 final_payment_due_date: dto.final_payment_due_date
                     ? new Date(dto.final_payment_due_date)
                     : undefined,
-                trip_end_date: dto.trip_end_date ? new Date(dto.trip_end_date) : undefined,
+                trip_end_date: dto.trip_end_date
+                    ? new Date(dto.trip_end_date)
+                    : undefined,
                 booking_participants: {
-                    create: dto.participants.map(p => ({
+                    create: dto.participants.map((p) => ({
                         full_name: p.full_name,
                         relation_type: p.relation_type,
                         is_primary: p.is_primary ?? false,
@@ -91,25 +94,41 @@ let BookingsService = class BookingsService {
         };
     }
     async findAll(filters) {
-        return this.db().booking.findMany({
+        return this.prisma.booking.findMany({
             where: {
                 ...(filters?.status && { booking_status: filters.status }),
                 ...(filters?.userId && { user_id: BigInt(filters.userId) }),
             },
             include: {
-                user: { select: { user_id: true, full_name: true, email: true, phone_number: true } },
+                user: {
+                    select: {
+                        user_id: true,
+                        full_name: true,
+                        email: true,
+                        phone_number: true,
+                    },
+                },
                 package: true,
-                booking_participants: { include: { passport: true, family_proof: true } },
+                booking_participants: {
+                    include: { passport: true, family_proof: true },
+                },
                 embassy_results: true,
             },
             orderBy: { created_at: 'desc' },
         });
     }
     async findOne(id) {
-        const booking = await this.db().booking.findUnique({
+        const booking = await this.prisma.booking.findUnique({
             where: { booking_id: BigInt(id) },
             include: {
-                user: { select: { user_id: true, full_name: true, email: true, phone_number: true } },
+                user: {
+                    select: {
+                        user_id: true,
+                        full_name: true,
+                        email: true,
+                        phone_number: true,
+                    },
+                },
                 package: { include: { package_hotels: { include: { hotel: true } } } },
                 booking_participants: {
                     include: {
@@ -131,16 +150,23 @@ let BookingsService = class BookingsService {
     async updateStatus(id, dto) {
         const booking = await this.findOne(id);
         const validTransitions = {
-            PENDING: [enums_1.BookingStatus.CONFIRMED, enums_1.BookingStatus.REJECTED, enums_1.BookingStatus.CANCELLED],
-            CONFIRMED: [enums_1.BookingStatus.COMPLETED, enums_1.BookingStatus.CANCELLED],
-            REJECTED: [],
-            CANCELLED: [],
-            COMPLETED: [],
+            [enums_1.BookingStatus.PENDING]: [
+                enums_1.BookingStatus.CONFIRMED,
+                enums_1.BookingStatus.REJECTED,
+                enums_1.BookingStatus.CANCELLED,
+            ],
+            [enums_1.BookingStatus.CONFIRMED]: [
+                enums_1.BookingStatus.COMPLETED,
+                enums_1.BookingStatus.CANCELLED,
+            ],
+            [enums_1.BookingStatus.REJECTED]: [],
+            [enums_1.BookingStatus.CANCELLED]: [],
+            [enums_1.BookingStatus.COMPLETED]: [],
         };
-        if (!validTransitions[booking.booking_status]?.includes(dto.booking_status)) {
+        if (!validTransitions[booking.booking_status].includes(dto.booking_status)) {
             throw new common_1.BadRequestException(`لا يمكن التحول من ${booking.booking_status} إلى ${dto.booking_status}`);
         }
-        return this.db().booking.update({
+        return this.prisma.booking.update({
             where: { booking_id: BigInt(id) },
             data: { booking_status: dto.booking_status },
         });
@@ -150,30 +176,37 @@ let BookingsService = class BookingsService {
         if (booking.user_id.toString() !== userId.toString()) {
             throw new common_1.ForbiddenException('ليس حجزك');
         }
-        if (!['PENDING', 'CONFIRMED'].includes(booking.booking_status)) {
+        if (booking.booking_status !== enums_1.BookingStatus.PENDING &&
+            booking.booking_status !== enums_1.BookingStatus.CONFIRMED) {
             throw new common_1.BadRequestException('لا يمكن إلغاء هذا الحجز');
         }
-        return this.db().booking.update({
+        return this.prisma.booking.update({
             where: { booking_id: BigInt(id) },
             data: { booking_status: enums_1.BookingStatus.CANCELLED },
         });
     }
     async updateByUser(bookingId, userId, dto) {
-        const booking = await this.db().booking.findUnique({
+        const booking = await this.prisma.booking.findUnique({
             where: { booking_id: BigInt(bookingId) },
         });
         if (!booking)
             throw new common_1.NotFoundException('Booking not found');
         if (booking.user_id.toString() !== userId.toString())
             throw new common_1.ForbiddenException('ليس حجزك');
-        if (booking.booking_status !== 'PENDING')
+        if (booking.booking_status !== enums_1.BookingStatus.PENDING)
             throw new common_1.BadRequestException('لا يمكن تعديل الحجز بعد مراجعته من الأدمن');
-        return this.db().booking.update({
+        return this.prisma.booking.update({
             where: { booking_id: BigInt(bookingId) },
             data: {
-                trip_end_date: dto.trip_end_date ? new Date(dto.trip_end_date) : undefined,
-                deposit_due_date: dto.deposit_due_date ? new Date(dto.deposit_due_date) : undefined,
-                final_payment_due_date: dto.final_payment_due_date ? new Date(dto.final_payment_due_date) : undefined,
+                trip_end_date: dto.trip_end_date
+                    ? new Date(dto.trip_end_date)
+                    : undefined,
+                deposit_due_date: dto.deposit_due_date
+                    ? new Date(dto.deposit_due_date)
+                    : undefined,
+                final_payment_due_date: dto.final_payment_due_date
+                    ? new Date(dto.final_payment_due_date)
+                    : undefined,
             },
         });
     }

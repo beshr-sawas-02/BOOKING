@@ -14,24 +14,24 @@ export enum Gender {
 }
 
 export enum RelationType {
-  PRIMARY   = 'PRIMARY',
-  SPOUSE    = 'SPOUSE',
-  SON       = 'SON',
-  DAUGHTER  = 'DAUGHTER',
-  MOTHER    = 'MOTHER',
-  FATHER    = 'FATHER',
-  SIBLING   = 'SIBLING', // أخ / أخت
+  PRIMARY = 'PRIMARY',
+  SPOUSE = 'SPOUSE',
+  SON = 'SON',
+  DAUGHTER = 'DAUGHTER',
+  MOTHER = 'MOTHER',
+  FATHER = 'FATHER',
+  SIBLING = 'SIBLING', // أخ / أخت
   // Extended
-  SON_WIFE        = 'SON_WIFE',        // زوجة الابن
+  SON_WIFE = 'SON_WIFE', // زوجة الابن
   DAUGHTER_HUSBAND = 'DAUGHTER_HUSBAND', // زوج البنت
-  GRANDSON        = 'GRANDSON',        // ابن الابن / ابن البنت
-  GRANDDAUGHTER   = 'GRANDDAUGHTER',   // بنت الابن / بنت البنت
-  BROTHER         = 'BROTHER',         // أخ
-  SISTER          = 'SISTER',          // أخت
-  NEPHEW          = 'NEPHEW',          // ابن الأخ / ابن الأخت
-  NIECE           = 'NIECE',           // بنت الأخ / بنت الأخت
-  BROTHER_WIFE    = 'BROTHER_WIFE',    // زوجة الأخ
-  SISTER_HUSBAND  = 'SISTER_HUSBAND',  // زوج الأخت
+  GRANDSON = 'GRANDSON', // ابن الابن / ابن البنت
+  GRANDDAUGHTER = 'GRANDDAUGHTER', // بنت الابن / بنت البنت
+  BROTHER = 'BROTHER', // أخ
+  SISTER = 'SISTER', // أخت
+  NEPHEW = 'NEPHEW', // ابن الأخ / ابن الأخت
+  NIECE = 'NIECE', // بنت الأخ / بنت الأخت
+  BROTHER_WIFE = 'BROTHER_WIFE', // زوجة الأخ
+  SISTER_HUSBAND = 'SISTER_HUSBAND', // زوج الأخت
 }
 
 export interface Participant {
@@ -67,7 +67,6 @@ export function calcAge(dateOfBirth: string | Date): number {
 // MAIN VALIDATOR
 // ─────────────────────────────────────────────────────────────
 export class MahramValidator {
-
   validate(primary: Primary, companions: Participant[]): ValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -81,7 +80,7 @@ export class MahramValidator {
       errors.push('لا يمكن إضافة أكثر من مرافقين اثنين لكل صاحب طلب');
     }
 
-    const relationTypes = companions.map(c => c.relation_type);
+    const relationTypes = companions.map((c) => c.relation_type);
     const hasSpouse = relationTypes.includes('SPOUSE');
     const hasSon = relationTypes.includes('SON');
     const hasDaughter = relationTypes.includes('DAUGHTER');
@@ -89,12 +88,13 @@ export class MahramValidator {
     const hasSister = relationTypes.includes('SISTER');
 
     for (const companion of companions) {
-      const result = this.validateCompanion(
-        primary,
-        companion,
-        companions,
-        { hasSpouse, hasSon, hasDaughter, hasBrother, hasSister }
-      );
+      const result = this.validateCompanion(primary, companion, companions, {
+        hasSpouse,
+        hasSon,
+        hasDaughter,
+        hasBrother,
+        hasSister,
+      });
       errors.push(...result.errors);
       warnings.push(...result.warnings);
     }
@@ -116,7 +116,7 @@ export class MahramValidator {
       hasDaughter: boolean;
       hasBrother: boolean;
       hasSister: boolean;
-    }
+    },
   ): ValidationResult {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -125,7 +125,6 @@ export class MahramValidator {
 
     // ── MALE PRIMARY (زوج / رجل) ─────────────────────────────
     if (primary.gender === Gender.MALE) {
-
       // الزوجة دائماً مسموحة
       if (rel === 'SPOUSE') {
         // مسموح بدون شروط
@@ -168,7 +167,6 @@ export class MahramValidator {
 
     // ── FEMALE PRIMARY (زوجة / إمرأة) ───────────────────────
     else if (primary.gender === Gender.FEMALE) {
-
       // ابن / بنت — مسموح مطلقاً
       if (rel === 'SON' || rel === 'DAUGHTER') {
         // مسموح
@@ -184,7 +182,9 @@ export class MahramValidator {
         if (age !== undefined && age < 45) {
           errors.push(`مرافق (أخت): يُشترط أن يكون عمر المرافقة فوق 45 سنة`);
         } else if (age === undefined) {
-          warnings.push(`مرافق (أخت): يُشترط التحقق من العمر — يجب أن يكون فوق 45 سنة`);
+          warnings.push(
+            `مرافق (أخت): يُشترط التحقق من العمر — يجب أن يكون فوق 45 سنة`,
+          );
         }
       }
 
@@ -193,9 +193,7 @@ export class MahramValidator {
         if (!context.hasSon) {
           errors.push(`مرافق (ابن الابن): يلزم وجود الابن ضمن المجموعة`);
         }
-      }
-
-      else if (rel === 'GRANDDAUGHTER') {
+      } else if (rel === 'GRANDDAUGHTER') {
         if (!context.hasDaughter) {
           errors.push(`مرافق (بنت البنت): يلزم وجود البنت ضمن المجموعة`);
         }
@@ -218,9 +216,7 @@ export class MahramValidator {
       // ابن الأخت / بنت الأخت → يلزم وجود الابن والمرأة معاً
       else if (rel === 'SISTER_HUSBAND') {
         errors.push(`مرافق (زوج الأخت): غير مسموح`);
-      }
-
-      else {
+      } else {
         warnings.push(`مرافق (${rel}): يرجى مراجعة الشروط مع مديرية الحج`);
       }
     }
@@ -233,11 +229,15 @@ export class MahramValidator {
   // ─────────────────────────────────────────────────────────
   isForbiddenCombination(primary: Primary, companions: Participant[]): boolean {
     // رجل + زوجة الأخ — غير مسموح (رقم 37)
-    const hasSpouseOfBrother = companions.some(c => c.relation_type === 'BROTHER_WIFE');
+    const hasSpouseOfBrother = companions.some(
+      (c) => c.relation_type === 'BROTHER_WIFE',
+    );
     if (primary.gender === Gender.MALE && hasSpouseOfBrother) return true;
 
     // امرأة + زوج الأخت — غير مسموح (رقم 52)
-    const hasSisterHusband = companions.some(c => c.relation_type === 'SISTER_HUSBAND');
+    const hasSisterHusband = companions.some(
+      (c) => c.relation_type === 'SISTER_HUSBAND',
+    );
     if (primary.gender === Gender.FEMALE && hasSisterHusband) return true;
 
     return false;

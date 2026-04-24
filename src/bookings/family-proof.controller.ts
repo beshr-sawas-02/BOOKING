@@ -1,6 +1,14 @@
 import {
-  Controller, Get, Post, Patch, Body, Param, UseGuards,
-  ParseIntPipe, UseInterceptors, UploadedFile,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  UseGuards,
+  ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { FamilyProofService } from './family-proof.service';
@@ -37,7 +45,10 @@ export class FamilyProofController {
   @Patch(':id/verify')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  verify(@Param('id', ParseIntPipe) id: number, @Body('status') status: VerificationStatus) {
+  verify(
+    @Param('id', ParseIntPipe) id: number,
+    @Body('status') status: VerificationStatus,
+  ) {
     return this.familyProofService.verify(id, status);
   }
 

@@ -11,11 +11,13 @@ var __metadata = (this && this.__metadata) || function (k, v) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.PrismaService = void 0;
 const common_1 = require("@nestjs/common");
-const { PrismaClient } = require('@prisma/client');
-let PrismaService = class PrismaService extends PrismaClient {
+const client_1 = require("@prisma/client");
+let PrismaService = class PrismaService extends client_1.PrismaClient {
     constructor() {
         super({
-            log: process.env.NODE_ENV === 'development' ? ['query', 'error', 'warn'] : ['error'],
+            log: process.env.NODE_ENV === 'development'
+                ? ['query', 'error', 'warn']
+                : ['error'],
         });
     }
     async onModuleInit() {

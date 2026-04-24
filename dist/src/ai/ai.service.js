@@ -47,8 +47,10 @@ const http = __importStar(require("http"));
 let AiService = AiService_1 = class AiService {
     logger = new common_1.Logger(AiService_1.name);
     pythonServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:5000';
-    async extractPassportDataFromBuffer(buffer, mimetype) {
-        return { confidence: 0 };
+    extractPassportDataFromBuffer(buffer, mimetype) {
+        void buffer;
+        void mimetype;
+        return Promise.resolve({ confidence: 0 });
     }
     async extractPassportData(imageUrl) {
         try {
@@ -99,9 +101,10 @@ let AiService = AiService_1 = class AiService {
                 res.on('data', (chunk) => chunks.push(chunk));
                 res.on('end', () => {
                     try {
-                        resolve(JSON.parse(Buffer.concat(chunks).toString()));
+                        const parsed = JSON.parse(Buffer.concat(chunks).toString());
+                        resolve(parsed);
                     }
-                    catch (e) {
+                    catch {
                         reject(new Error('Invalid JSON from Python service'));
                     }
                 });

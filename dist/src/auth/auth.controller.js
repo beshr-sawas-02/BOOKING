@@ -22,9 +22,15 @@ let AuthController = class AuthController {
     constructor(authService) {
         this.authService = authService;
     }
-    register(dto) { return this.authService.registerUser(dto); }
-    login(dto) { return this.authService.loginUser(dto); }
-    adminLogin(dto) { return this.authService.loginAdmin(dto); }
+    register(dto) {
+        return this.authService.registerUser(dto);
+    }
+    login(dto) {
+        return this.authService.loginUser(dto);
+    }
+    adminLogin(dto) {
+        return this.authService.loginAdmin(dto);
+    }
 };
 exports.AuthController = AuthController;
 __decorate([

@@ -25,8 +25,12 @@ let EmbassyController = class EmbassyController {
     constructor(embassyService) {
         this.embassyService = embassyService;
     }
-    getStats() { return this.embassyService.getStats(); }
-    findAll(status) { return this.embassyService.findAll(status); }
+    getStats() {
+        return this.embassyService.getStats();
+    }
+    findAll(status) {
+        return this.embassyService.findAll(status);
+    }
     findByBooking(bookingId) {
         return this.embassyService.findByBooking(bookingId);
     }

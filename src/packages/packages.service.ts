@@ -7,7 +7,9 @@ import { UpdatePackageDto } from './dto/update-package.dto';
 export class PackagesService {
   constructor(private prisma: PrismaService) {}
 
-  private db(): any { return this.prisma as any; }
+  private db(): any {
+    return this.prisma as any;
+  }
 
   async create(dto: CreatePackageDto) {
     const { hotel_ids, ...data } = dto;
@@ -27,7 +29,11 @@ export class PackagesService {
       where: type ? { package_type: type } : undefined,
       include: {
         package_hotels: {
-          include: { hotel: { include: { hotel_images: { orderBy: { image_order: 'asc' } } } } },
+          include: {
+            hotel: {
+              include: { hotel_images: { orderBy: { image_order: 'asc' } } },
+            },
+          },
         },
       },
       orderBy: { created_at: 'desc' },
@@ -39,7 +45,11 @@ export class PackagesService {
       where: { package_id: BigInt(id) },
       include: {
         package_hotels: {
-          include: { hotel: { include: { hotel_images: { orderBy: { image_order: 'asc' } } } } },
+          include: {
+            hotel: {
+              include: { hotel_images: { orderBy: { image_order: 'asc' } } },
+            },
+          },
         },
         _count: { select: { bookings: true } },
       },

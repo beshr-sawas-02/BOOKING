@@ -20,13 +20,17 @@ let HotelsService = class HotelsService {
         this.prisma = prisma;
         this.cloudinary = cloudinary;
     }
-    db() { return this.prisma; }
+    db() {
+        return this.prisma;
+    }
     async create(dto) {
         return this.db().hotel.create({ data: dto });
     }
     async findAll(location) {
         return this.db().hotel.findMany({
-            where: location ? { location: { contains: location, mode: 'insensitive' } } : undefined,
+            where: location
+                ? { location: { contains: location, mode: 'insensitive' } }
+                : undefined,
             include: { hotel_images: { orderBy: { image_order: 'asc' } } },
             orderBy: { stars: 'desc' },
         });
@@ -42,7 +46,10 @@ let HotelsService = class HotelsService {
     }
     async update(id, dto) {
         await this.findOne(id);
-        return this.db().hotel.update({ where: { hotel_id: BigInt(id) }, data: dto });
+        return this.db().hotel.update({
+            where: { hotel_id: BigInt(id) },
+            data: dto,
+        });
     }
     async remove(id) {
         await this.findOne(id);
@@ -61,12 +68,15 @@ let HotelsService = class HotelsService {
         });
         if (!img)
             throw new common_1.NotFoundException('Image not found');
-        return this.db().hotelImage.delete({ where: { image_id: BigInt(imageId) } });
+        return this.db().hotelImage.delete({
+            where: { image_id: BigInt(imageId) },
+        });
     }
 };
 exports.HotelsService = HotelsService;
 exports.HotelsService = HotelsService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService, cloudinary_service_1.CloudinaryService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        cloudinary_service_1.CloudinaryService])
 ], HotelsService);
 //# sourceMappingURL=hotels.service.js.map

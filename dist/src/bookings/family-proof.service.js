@@ -20,7 +20,9 @@ let FamilyProofService = class FamilyProofService {
         this.prisma = prisma;
         this.cloudinary = cloudinary;
     }
-    db() { return this.prisma; }
+    db() {
+        return this.prisma;
+    }
     async upload(userId, file, dto) {
         const booking = await this.db().booking.findUnique({
             where: { booking_id: BigInt(dto.booking_id) },

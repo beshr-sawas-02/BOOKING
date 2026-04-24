@@ -16,7 +16,10 @@ async function bootstrap() {
         transformOptions: { enableImplicitConversion: true },
     }));
     app.enableCors({
-        origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:8080'],
+        origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+            'http://localhost:3000',
+            'http://localhost:8080',
+        ],
         methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
         credentials: true,
         allowedHeaders: 'Content-Type,Authorization',

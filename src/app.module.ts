@@ -31,8 +31,6 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     UploadModule,
     AiModule,
   ],
-  providers: [
-    { provide: APP_FILTER, useClass: AllExceptionsFilter },
-  ],
+  providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })
 export class AppModule {}

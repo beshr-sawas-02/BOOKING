@@ -1,6 +1,12 @@
 import {
-  IsInt, IsArray, IsString, IsEnum, IsOptional,
-  ValidateNested, IsBoolean, IsDateString, IsNumber, Min, Max,
+  IsInt,
+  IsArray,
+  IsString,
+  IsEnum,
+  IsOptional,
+  ValidateNested,
+  IsBoolean,
+  IsDateString,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RelationType } from '../../common/enums';

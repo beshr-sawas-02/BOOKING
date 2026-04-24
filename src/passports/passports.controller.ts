@@ -1,6 +1,15 @@
 import {
-  Controller, Get, Post, Patch, Body, Param, Query,
-  UseGuards, ParseIntPipe, UseInterceptors, UploadedFile,
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { PassportsService } from './passports.service';
@@ -28,12 +37,16 @@ export class PassportsController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles('admin')
-  findAll() { return this.passportsService.findAll(); }
+  findAll() {
+    return this.passportsService.findAll();
+  }
 
   @Get('pending')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  findPending() { return this.passportsService.findPendingVerification(); }
+  findPending() {
+    return this.passportsService.findPendingVerification();
+  }
 
   @Get('booking/:bookingId')
   findByBooking(@Param('bookingId', ParseIntPipe) bookingId: number) {
@@ -55,13 +68,22 @@ export class PassportsController {
   ) {
     const isAdmin = user.role === 'admin';
     const userId = isAdmin ? user.admin_id : user.user_id;
-    return this.passportsService.uploadImage(id, Number(userId), file, imageType, isAdmin);
+    return this.passportsService.uploadImage(
+      id,
+      Number(userId),
+      file,
+      imageType,
+      isAdmin,
+    );
   }
 
   @Patch(':id/verify')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  verify(@Param('id', ParseIntPipe) id: number, @Body() dto: VerifyPassportDto) {
+  verify(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: VerifyPassportDto,
+  ) {
     return this.passportsService.verifyPassport(id, dto);
   }
 

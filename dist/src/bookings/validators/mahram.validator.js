@@ -46,14 +46,20 @@ class MahramValidator {
         if (companions.length > 2) {
             errors.push('لا يمكن إضافة أكثر من مرافقين اثنين لكل صاحب طلب');
         }
-        const relationTypes = companions.map(c => c.relation_type);
+        const relationTypes = companions.map((c) => c.relation_type);
         const hasSpouse = relationTypes.includes('SPOUSE');
         const hasSon = relationTypes.includes('SON');
         const hasDaughter = relationTypes.includes('DAUGHTER');
         const hasBrother = relationTypes.includes('BROTHER');
         const hasSister = relationTypes.includes('SISTER');
         for (const companion of companions) {
-            const result = this.validateCompanion(primary, companion, companions, { hasSpouse, hasSon, hasDaughter, hasBrother, hasSister });
+            const result = this.validateCompanion(primary, companion, companions, {
+                hasSpouse,
+                hasSon,
+                hasDaughter,
+                hasBrother,
+                hasSister,
+            });
             errors.push(...result.errors);
             warnings.push(...result.warnings);
         }
@@ -134,10 +140,10 @@ class MahramValidator {
         return { valid: errors.length === 0, errors, warnings };
     }
     isForbiddenCombination(primary, companions) {
-        const hasSpouseOfBrother = companions.some(c => c.relation_type === 'BROTHER_WIFE');
+        const hasSpouseOfBrother = companions.some((c) => c.relation_type === 'BROTHER_WIFE');
         if (primary.gender === Gender.MALE && hasSpouseOfBrother)
             return true;
-        const hasSisterHusband = companions.some(c => c.relation_type === 'SISTER_HUSBAND');
+        const hasSisterHusband = companions.some((c) => c.relation_type === 'SISTER_HUSBAND');
         if (primary.gender === Gender.FEMALE && hasSisterHusband)
             return true;
         return false;

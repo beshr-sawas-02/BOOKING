@@ -6,13 +6,19 @@ import { UpdateUserDto } from './dto/update-user.dto';
 export class UsersService {
   constructor(private prisma: PrismaService) {}
 
-  private db(): any { return this.prisma as any; }
+  private db(): any {
+    return this.prisma as any;
+  }
 
   async findAll() {
     return this.db().user.findMany({
       select: {
-        user_id: true, email: true, full_name: true, phone_number: true,
-        email_verified: true, created_at: true,
+        user_id: true,
+        email: true,
+        full_name: true,
+        phone_number: true,
+        email_verified: true,
+        created_at: true,
         _count: { select: { bookings: true } },
       },
       orderBy: { created_at: 'desc' },
@@ -23,9 +29,13 @@ export class UsersService {
     const user = await this.db().user.findUnique({
       where: { user_id: BigInt(id) },
       select: {
-        user_id: true, email: true, full_name: true,
-        phone_number: true, email_verified: true,
-        created_at: true, updated_at: true,
+        user_id: true,
+        email: true,
+        full_name: true,
+        phone_number: true,
+        email_verified: true,
+        created_at: true,
+        updated_at: true,
       },
     });
     if (!user) throw new NotFoundException('User not found');
@@ -38,8 +48,11 @@ export class UsersService {
       where: { user_id: BigInt(id) },
       data: dto,
       select: {
-        user_id: true, email: true, full_name: true,
-        phone_number: true, updated_at: true,
+        user_id: true,
+        email: true,
+        full_name: true,
+        phone_number: true,
+        updated_at: true,
       },
     });
   }
@@ -48,8 +61,12 @@ export class UsersService {
     return this.db().user.findUnique({
       where: { user_id: BigInt(userId) },
       select: {
-        user_id: true, email: true, full_name: true, phone_number: true,
-        email_verified: true, created_at: true,
+        user_id: true,
+        email: true,
+        full_name: true,
+        phone_number: true,
+        email_verified: true,
+        created_at: true,
         _count: { select: { bookings: true, passports: true } },
       },
     });

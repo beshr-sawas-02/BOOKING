@@ -1,4 +1,12 @@
-import { IsString, IsEnum, IsNumber, IsOptional, IsInt, Min, IsArray } from 'class-validator';
+import {
+  IsString,
+  IsEnum,
+  IsNumber,
+  IsOptional,
+  IsInt,
+  Min,
+  IsArray,
+} from 'class-validator';
 import { PackageType } from '../../common/enums';
 
 export class CreatePackageDto {

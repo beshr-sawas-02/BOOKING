@@ -1,4 +1,12 @@
-import { Controller, Get, Post, Body, Param, UseGuards, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { AdminsService } from './admins.service';
 import { CreateAdminDto } from './dto/create-admin.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -12,14 +20,22 @@ export class AdminsController {
   constructor(private adminsService: AdminsService) {}
 
   @Get('dashboard')
-  getDashboard() { return this.adminsService.getDashboardStats(); }
+  getDashboard() {
+    return this.adminsService.getDashboardStats();
+  }
 
   @Get()
-  findAll() { return this.adminsService.findAll(); }
+  findAll() {
+    return this.adminsService.findAll();
+  }
 
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.adminsService.findOne(id); }
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.adminsService.findOne(id);
+  }
 
   @Post()
-  create(@Body() dto: CreateAdminDto) { return this.adminsService.create(dto); }
+  create(@Body() dto: CreateAdminDto) {
+    return this.adminsService.create(dto);
+  }
 }

@@ -7,9 +7,14 @@ import { MulterFile } from '../common/types/multer.type';
 
 @Injectable()
 export class HotelsService {
-  constructor(private prisma: PrismaService, private cloudinary: CloudinaryService) {}
+  constructor(
+    private prisma: PrismaService,
+    private cloudinary: CloudinaryService,
+  ) {}
 
-  private db(): any { return this.prisma as any; }
+  private db(): any {
+    return this.prisma as any;
+  }
 
   async create(dto: CreateHotelDto) {
     return this.db().hotel.create({ data: dto });
@@ -17,7 +22,9 @@ export class HotelsService {
 
   async findAll(location?: string) {
     return this.db().hotel.findMany({
-      where: location ? { location: { contains: location, mode: 'insensitive' } } : undefined,
+      where: location
+        ? { location: { contains: location, mode: 'insensitive' } }
+        : undefined,
       include: { hotel_images: { orderBy: { image_order: 'asc' } } },
       orderBy: { stars: 'desc' },
     });
@@ -34,7 +41,10 @@ export class HotelsService {
 
   async update(id: number, dto: UpdateHotelDto) {
     await this.findOne(id);
-    return this.db().hotel.update({ where: { hotel_id: BigInt(id) }, data: dto });
+    return this.db().hotel.update({
+      where: { hotel_id: BigInt(id) },
+      data: dto,
+    });
   }
 
   async remove(id: number) {
@@ -55,6 +65,8 @@ export class HotelsService {
       where: { image_id: BigInt(imageId) },
     });
     if (!img) throw new NotFoundException('Image not found');
-    return this.db().hotelImage.delete({ where: { image_id: BigInt(imageId) } });
+    return this.db().hotelImage.delete({
+      where: { image_id: BigInt(imageId) },
+    });
   }
 }

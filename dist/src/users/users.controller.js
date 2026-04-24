@@ -31,8 +31,12 @@ let UsersController = class UsersController {
     updateProfile(user, dto) {
         return this.usersService.update(Number(user.user_id), dto);
     }
-    findAll() { return this.usersService.findAll(); }
-    findOne(id) { return this.usersService.findOne(id); }
+    findAll() {
+        return this.usersService.findAll();
+    }
+    findOne(id) {
+        return this.usersService.findOne(id);
+    }
 };
 exports.UsersController = UsersController;
 __decorate([

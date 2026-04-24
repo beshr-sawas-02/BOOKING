@@ -1,4 +1,15 @@
-import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { PackagesService } from './packages.service';
 import { CreatePackageDto } from './dto/create-package.dto';
 import { UpdatePackageDto } from './dto/update-package.dto';
@@ -44,14 +55,20 @@ export class PackagesController {
   @Post(':id/hotels/:hotelId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  addHotel(@Param('id', ParseIntPipe) id: number, @Param('hotelId', ParseIntPipe) hotelId: number) {
+  addHotel(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('hotelId', ParseIntPipe) hotelId: number,
+  ) {
     return this.packagesService.addHotel(id, hotelId);
   }
 
   @Delete(':id/hotels/:hotelId')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  removeHotel(@Param('id', ParseIntPipe) id: number, @Param('hotelId', ParseIntPipe) hotelId: number) {
+  removeHotel(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('hotelId', ParseIntPipe) hotelId: number,
+  ) {
     return this.packagesService.removeHotel(id, hotelId);
   }
 }

@@ -17,12 +17,18 @@ let UsersService = class UsersService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    db() { return this.prisma; }
+    db() {
+        return this.prisma;
+    }
     async findAll() {
         return this.db().user.findMany({
             select: {
-                user_id: true, email: true, full_name: true, phone_number: true,
-                email_verified: true, created_at: true,
+                user_id: true,
+                email: true,
+                full_name: true,
+                phone_number: true,
+                email_verified: true,
+                created_at: true,
                 _count: { select: { bookings: true } },
             },
             orderBy: { created_at: 'desc' },
@@ -32,9 +38,13 @@ let UsersService = class UsersService {
         const user = await this.db().user.findUnique({
             where: { user_id: BigInt(id) },
             select: {
-                user_id: true, email: true, full_name: true,
-                phone_number: true, email_verified: true,
-                created_at: true, updated_at: true,
+                user_id: true,
+                email: true,
+                full_name: true,
+                phone_number: true,
+                email_verified: true,
+                created_at: true,
+                updated_at: true,
             },
         });
         if (!user)
@@ -47,8 +57,11 @@ let UsersService = class UsersService {
             where: { user_id: BigInt(id) },
             data: dto,
             select: {
-                user_id: true, email: true, full_name: true,
-                phone_number: true, updated_at: true,
+                user_id: true,
+                email: true,
+                full_name: true,
+                phone_number: true,
+                updated_at: true,
             },
         });
     }
@@ -56,8 +69,12 @@ let UsersService = class UsersService {
         return this.db().user.findUnique({
             where: { user_id: BigInt(userId) },
             select: {
-                user_id: true, email: true, full_name: true, phone_number: true,
-                email_verified: true, created_at: true,
+                user_id: true,
+                email: true,
+                full_name: true,
+                phone_number: true,
+                email_verified: true,
+                created_at: true,
                 _count: { select: { bookings: true, passports: true } },
             },
         });

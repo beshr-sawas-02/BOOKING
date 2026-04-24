@@ -11,7 +11,9 @@ import { CreateReviewDto } from './dto/create-review.dto';
 export class ReviewsService {
   constructor(private prisma: PrismaService) {}
 
-  private db() { return this.prisma as any; }
+  private db() {
+    return this.prisma as any;
+  }
 
   // ─────────────────────────────────────────────────────────
   // إضافة تقييم — فقط بعد اكتمال الرحلة
@@ -64,7 +66,8 @@ export class ReviewsService {
     });
 
     const avgRating = reviews.length
-      ? reviews.reduce((sum: number, r: any) => sum + r.rating, 0) / reviews.length
+      ? reviews.reduce((sum: number, r: any) => sum + r.rating, 0) /
+        reviews.length
       : 0;
 
     return {
@@ -108,7 +111,7 @@ export class ReviewsService {
           average_rating: Math.round(r._avg.rating * 10) / 10,
           total_reviews: r._count.rating,
         };
-      })
+      }),
     );
 
     return packages;

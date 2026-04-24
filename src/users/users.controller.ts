@@ -1,4 +1,12 @@
-import { Controller, Get, Patch, Body, Param, UseGuards, ParseIntPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Patch,
+  Body,
+  Param,
+  UseGuards,
+  ParseIntPipe,
+} from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
@@ -24,10 +32,14 @@ export class UsersController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles('admin')
-  findAll() { return this.usersService.findAll(); }
+  findAll() {
+    return this.usersService.findAll();
+  }
 
   @Get(':id')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  findOne(@Param('id', ParseIntPipe) id: number) { return this.usersService.findOne(id); }
+  findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.usersService.findOne(id);
+  }
 }

@@ -43,9 +43,7 @@ exports.AppModule = AppModule = __decorate([
             upload_module_1.UploadModule,
             ai_module_1.AiModule,
         ],
-        providers: [
-            { provide: core_1.APP_FILTER, useClass: all_exceptions_filter_1.AllExceptionsFilter },
-        ],
+        providers: [{ provide: core_1.APP_FILTER, useClass: all_exceptions_filter_1.AllExceptionsFilter }],
     })
 ], AppModule);
 //# sourceMappingURL=app.module.js.map

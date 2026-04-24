@@ -17,7 +17,9 @@ let ReviewsService = class ReviewsService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    db() { return this.prisma; }
+    db() {
+        return this.prisma;
+    }
     async create(userId, dto) {
         const booking = await this.db().booking.findUnique({
             where: { booking_id: BigInt(dto.booking_id) },
@@ -56,7 +58,8 @@ let ReviewsService = class ReviewsService {
             orderBy: { created_at: 'desc' },
         });
         const avgRating = reviews.length
-            ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
+            ? reviews.reduce((sum, r) => sum + r.rating, 0) /
+                reviews.length
             : 0;
         return {
             package_id: packageId,

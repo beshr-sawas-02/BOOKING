@@ -32,8 +32,12 @@ let PassportsController = class PassportsController {
     create(user, dto) {
         return this.passportsService.create(Number(user.user_id), dto);
     }
-    findAll() { return this.passportsService.findAll(); }
-    findPending() { return this.passportsService.findPendingVerification(); }
+    findAll() {
+        return this.passportsService.findAll();
+    }
+    findPending() {
+        return this.passportsService.findPendingVerification();
+    }
     findByBooking(bookingId) {
         return this.passportsService.findByBooking(bookingId);
     }

@@ -25,7 +25,10 @@ async function bootstrap() {
   // ✅ FIX 2: CORS - origin: '*' مع credentials: true غلط
   // credentials تحتاج origin محدد وليس wildcard
   app.enableCors({
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || ['http://localhost:3000', 'http://localhost:8080'],
+    origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+      'http://localhost:3000',
+      'http://localhost:8080',
+    ],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
     credentials: true,
     allowedHeaders: 'Content-Type,Authorization',

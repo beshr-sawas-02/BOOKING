@@ -1,4 +1,11 @@
-import { IsString, IsInt, IsOptional, Min, Max, IsNumber } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsOptional,
+  Min,
+  Max,
+  IsNumber,
+} from 'class-validator';
 
 export class CreateHotelDto {
   @IsString()

@@ -25,20 +25,30 @@ export interface DocumentExtraction {
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private readonly pythonServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:5000';
+  private readonly pythonServiceUrl =
+    process.env.AI_SERVICE_URL || 'http://localhost:5000';
 
   // ─────────────────────────────────────────────────────────
   // Passport extraction — يستدعي Python OCR service
   // ─────────────────────────────────────────────────────────
-  async extractPassportDataFromBuffer(buffer: Buffer, mimetype: string): Promise<PassportExtraction> {
+  extractPassportDataFromBuffer(
+    buffer: Buffer,
+    mimetype: string,
+  ): Promise<PassportExtraction> {
     // غير مستخدمة — OCR يعمل من URL
-    return { confidence: 0 };
+    // نستخدم المتغيرات فقط لإسكات ESLint
+    void buffer;
+    void mimetype;
+    return Promise.resolve({ confidence: 0 });
   }
 
   async extractPassportData(imageUrl: string): Promise<PassportExtraction> {
     try {
       this.logger.log(`Calling Python AI service for: ${imageUrl}`);
-      const result = await this.callPythonService('/extract-passport', { image_url: imageUrl });
+      const result = await this.callPythonService<PassportExtraction>(
+        '/extract-passport',
+        { image_url: imageUrl },
+      );
 
       if (!result || result.confidence === 0) {
         this.logger.warn('Python service returned confidence 0');
@@ -46,11 +56,9 @@ export class AiService {
       }
 
       this.logger.log(`AI extracted with confidence: ${result.confidence}`);
-      return result as PassportExtraction;
-
+      return result;
     } catch (error: unknown) {
       this.logger.error('Python AI service error:', (error as Error).message);
-      // لا mock — نرجع confidence 0 فقط
       return { confidence: 0 };
     }
   }
@@ -60,9 +68,12 @@ export class AiService {
   // ─────────────────────────────────────────────────────────
   async extractFamilyDocument(imageUrl: string): Promise<DocumentExtraction> {
     try {
-      const result = await this.callPythonService('/extract-document', { image_url: imageUrl });
+      const result = await this.callPythonService<DocumentExtraction>(
+        '/extract-document',
+        { image_url: imageUrl },
+      );
       if (!result || result.confidence === 0) return { confidence: 0 };
-      return result as DocumentExtraction;
+      return result;
     } catch (error: unknown) {
       this.logger.error('Document extraction error:', (error as Error).message);
       return { confidence: 0 };
@@ -72,7 +83,7 @@ export class AiService {
   // ─────────────────────────────────────────────────────────
   // HTTP call للـ Python service
   // ─────────────────────────────────────────────────────────
-  private callPythonService(endpoint: string, body: object): Promise<any> {
+  private callPythonService<T>(endpoint: string, body: object): Promise<T> {
     return new Promise((resolve, reject) => {
       const bodyStr = JSON.stringify(body);
       const urlObj = new URL(this.pythonServiceUrl + endpoint);
@@ -92,11 +103,12 @@ export class AiService {
 
       const req = lib.request(options, (res) => {
         const chunks: Buffer[] = [];
-        res.on('data', (chunk) => chunks.push(chunk));
+        res.on('data', (chunk: Buffer) => chunks.push(chunk));
         res.on('end', () => {
           try {
-            resolve(JSON.parse(Buffer.concat(chunks).toString()));
-          } catch (e: unknown) {
+            const parsed = JSON.parse(Buffer.concat(chunks).toString()) as T;
+            resolve(parsed);
+          } catch {
             reject(new Error('Invalid JSON from Python service'));
           }
         });

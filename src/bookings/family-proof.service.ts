@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from '../upload/cloudinary.service';
 import { CreateFamilyProofDto } from './dto/create-family-proof.dto';
@@ -10,9 +14,11 @@ export class FamilyProofService {
   constructor(
     private prisma: PrismaService,
     private cloudinary: CloudinaryService,
-    ) {}
+  ) {}
 
-  private db(): any { return this.prisma as any; }
+  private db(): any {
+    return this.prisma as any;
+  }
 
   async upload(userId: number, file: MulterFile, dto: CreateFamilyProofDto) {
     const booking = await this.db().booking.findUnique({

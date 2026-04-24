@@ -17,7 +17,9 @@ let PackagesService = class PackagesService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    db() { return this.prisma; }
+    db() {
+        return this.prisma;
+    }
     async create(dto) {
         const { hotel_ids, ...data } = dto;
         return this.db().package.create({
@@ -35,7 +37,11 @@ let PackagesService = class PackagesService {
             where: type ? { package_type: type } : undefined,
             include: {
                 package_hotels: {
-                    include: { hotel: { include: { hotel_images: { orderBy: { image_order: 'asc' } } } } },
+                    include: {
+                        hotel: {
+                            include: { hotel_images: { orderBy: { image_order: 'asc' } } },
+                        },
+                    },
                 },
             },
             orderBy: { created_at: 'desc' },
@@ -46,7 +52,11 @@ let PackagesService = class PackagesService {
             where: { package_id: BigInt(id) },
             include: {
                 package_hotels: {
-                    include: { hotel: { include: { hotel_images: { orderBy: { image_order: 'asc' } } } } },
+                    include: {
+                        hotel: {
+                            include: { hotel_images: { orderBy: { image_order: 'asc' } } },
+                        },
+                    },
                 },
                 _count: { select: { bookings: true } },
             },

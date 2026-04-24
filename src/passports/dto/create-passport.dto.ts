@@ -1,4 +1,10 @@
-import { IsString, IsInt, IsOptional, IsEnum, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsInt,
+  IsOptional,
+  IsEnum,
+  IsDateString,
+} from 'class-validator';
 import { Gender } from '../../common/enums';
 
 export class CreatePassportDto {

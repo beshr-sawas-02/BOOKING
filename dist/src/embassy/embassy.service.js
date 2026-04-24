@@ -18,7 +18,9 @@ let EmbassyService = class EmbassyService {
     constructor(prisma) {
         this.prisma = prisma;
     }
-    db() { return this.prisma; }
+    db() {
+        return this.prisma;
+    }
     async submitBookingToEmbassy(bookingId) {
         const booking = await this.db().booking.findUnique({
             where: { booking_id: BigInt(bookingId) },
@@ -46,7 +48,10 @@ let EmbassyService = class EmbassyService {
             where: { passport_id: p.passport_id },
             data: { sent_to_embassy: true },
         }));
-        const results = await this.prisma.$transaction([...createResults, ...markSent]);
+        const results = await this.prisma.$transaction([
+            ...createResults,
+            ...markSent,
+        ]);
         return {
             message: `Submitted ${passports.length} passport(s) to embassy`,
             results: results.slice(0, passports.length),
@@ -70,8 +75,11 @@ let EmbassyService = class EmbassyService {
             include: {
                 passport: {
                     select: {
-                        passport_id: true, full_name_en: true, full_name_ar: true,
-                        passport_number: true, nationality: true,
+                        passport_id: true,
+                        full_name_en: true,
+                        full_name_ar: true,
+                        passport_number: true,
+                        nationality: true,
                     },
                 },
             },
@@ -82,7 +90,9 @@ let EmbassyService = class EmbassyService {
         return this.db().embassyResult.findMany({
             where: status ? { embassy_status: status } : undefined,
             include: {
-                booking: { include: { user: { select: { full_name: true, email: true } } } },
+                booking: {
+                    include: { user: { select: { full_name: true, email: true } } },
+                },
                 passport: { select: { full_name_en: true, passport_number: true } },
             },
             orderBy: { uploaded_at: 'desc' },

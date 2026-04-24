@@ -24,10 +24,18 @@ let AdminsController = class AdminsController {
     constructor(adminsService) {
         this.adminsService = adminsService;
     }
-    getDashboard() { return this.adminsService.getDashboardStats(); }
-    findAll() { return this.adminsService.findAll(); }
-    findOne(id) { return this.adminsService.findOne(id); }
-    create(dto) { return this.adminsService.create(dto); }
+    getDashboard() {
+        return this.adminsService.getDashboardStats();
+    }
+    findAll() {
+        return this.adminsService.findAll();
+    }
+    findOne(id) {
+        return this.adminsService.findOne(id);
+    }
+    create(dto) {
+        return this.adminsService.create(dto);
+    }
 };
 exports.AdminsController = AdminsController;
 __decorate([

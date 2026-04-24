@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateEmbassyResultDto } from './dto/update-embassy-result.dto';
 import { EmbassyStatus } from '../common/enums';
@@ -7,7 +11,9 @@ import { EmbassyStatus } from '../common/enums';
 export class EmbassyService {
   constructor(private prisma: PrismaService) {}
 
-  private db(): any { return this.prisma as any; }
+  private db(): any {
+    return this.prisma as any;
+  }
 
   async submitBookingToEmbassy(bookingId: number) {
     const booking = await this.db().booking.findUnique({
@@ -16,7 +22,9 @@ export class EmbassyService {
     });
     if (!booking) throw new NotFoundException('Booking not found');
     if (booking.booking_status !== 'CONFIRMED') {
-      throw new BadRequestException('Only confirmed bookings can be submitted to embassy');
+      throw new BadRequestException(
+        'Only confirmed bookings can be submitted to embassy',
+      );
     }
 
     const passports = booking.booking_participants
@@ -44,7 +52,10 @@ export class EmbassyService {
       }),
     );
 
-    const results = await (this.prisma as any).$transaction([...createResults, ...markSent]);
+    const results = await (this.prisma as any).$transaction([
+      ...createResults,
+      ...markSent,
+    ]);
 
     return {
       message: `Submitted ${passports.length} passport(s) to embassy`,
@@ -71,8 +82,11 @@ export class EmbassyService {
       include: {
         passport: {
           select: {
-            passport_id: true, full_name_en: true, full_name_ar: true,
-            passport_number: true, nationality: true,
+            passport_id: true,
+            full_name_en: true,
+            full_name_ar: true,
+            passport_number: true,
+            nationality: true,
           },
         },
       },
@@ -84,7 +98,9 @@ export class EmbassyService {
     return this.db().embassyResult.findMany({
       where: status ? { embassy_status: status } : undefined,
       include: {
-        booking: { include: { user: { select: { full_name: true, email: true } } } },
+        booking: {
+          include: { user: { select: { full_name: true, email: true } } },
+        },
         passport: { select: { full_name_en: true, passport_number: true } },
       },
       orderBy: { uploaded_at: 'desc' },
