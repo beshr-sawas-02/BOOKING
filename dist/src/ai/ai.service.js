@@ -47,11 +47,8 @@ const http = __importStar(require("http"));
 let AiService = AiService_1 = class AiService {
     logger = new common_1.Logger(AiService_1.name);
     pythonServiceUrl = process.env.AI_SERVICE_URL || 'http://localhost:5000';
-    extractPassportDataFromBuffer(buffer, mimetype) {
-        void buffer;
-        void mimetype;
-        return Promise.resolve({ confidence: 0 });
-    }
+    apiKey = process.env.OCR_API_KEY || '';
+    timeoutMs = 180000;
     async extractPassportData(imageUrl) {
         try {
             this.logger.log(`Calling Python AI service for: ${imageUrl}`);
@@ -86,15 +83,19 @@ let AiService = AiService_1 = class AiService {
             const urlObj = new URL(this.pythonServiceUrl + endpoint);
             const isHttps = urlObj.protocol === 'https:';
             const lib = isHttps ? https : http;
+            const headers = {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(bodyStr),
+            };
+            if (this.apiKey) {
+                headers['X-API-Key'] = this.apiKey;
+            }
             const options = {
                 hostname: urlObj.hostname,
                 port: urlObj.port || (isHttps ? 443 : 80),
                 path: urlObj.pathname,
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Content-Length': Buffer.byteLength(bodyStr),
-                },
+                headers,
             };
             const req = lib.request(options, (res) => {
                 const chunks = [];
@@ -110,9 +111,9 @@ let AiService = AiService_1 = class AiService {
                 });
             });
             req.on('error', (err) => reject(err));
-            req.setTimeout(120000, () => {
+            req.setTimeout(this.timeoutMs, () => {
                 req.destroy();
-                reject(new Error('Python service timeout'));
+                reject(new Error(`Python service timeout after ${this.timeoutMs}ms`));
             });
             req.write(bodyStr);
             req.end();

@@ -19,7 +19,8 @@ export interface DocumentExtraction {
 export declare class AiService {
     private readonly logger;
     private readonly pythonServiceUrl;
-    extractPassportDataFromBuffer(buffer: Buffer, mimetype: string): Promise<PassportExtraction>;
+    private readonly apiKey;
+    private readonly timeoutMs;
     extractPassportData(imageUrl: string): Promise<PassportExtraction>;
     extractFamilyDocument(imageUrl: string): Promise<DocumentExtraction>;
     private callPythonService;

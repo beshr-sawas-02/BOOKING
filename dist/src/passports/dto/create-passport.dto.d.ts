@@ -9,4 +9,5 @@ export declare class CreatePassportDto {
     date_of_birth?: string;
     issue_date?: string;
     expiry_date?: string;
+    image_url?: string;
 }

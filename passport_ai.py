@@ -4,11 +4,17 @@ Passport OCR Service - Optimized Single Pass
 """
 
 from flask import Flask, request, jsonify
-import requests, re, json
+from datetime import datetime
+import requests, re, json, os
 import numpy as np
 import cv2
 
 app = Flask(__name__)
+
+# ─────────────────────────────────────────────────────────
+# إعدادات الأمان والبيئة
+# ─────────────────────────────────────────────────────────
+API_KEY = os.environ.get('OCR_API_KEY', 'dev-key-change-in-production')
 
 print("Loading EasyOCR...")
 import easyocr
@@ -17,6 +23,14 @@ print("✅ EasyOCR ready")
 print("🤖 Passport OCR Service")
 print("📍 http://localhost:5000/health")
 print("📍 POST http://localhost:5000/extract-passport")
+
+
+def check_api_key():
+    """التحقق من مفتاح API"""
+    # في وضع التطوير، نقبل بدون مفتاح إذا كان default
+    if API_KEY == 'dev-key-change-in-production':
+        return True
+    return request.headers.get('X-API-Key') == API_KEY
 
 
 def preprocess(img_bytes: bytes) -> np.ndarray:
@@ -49,6 +63,10 @@ def fix_name(text: str) -> str:
 
 def parse_mrz(texts: list) -> dict:
     result = {}
+    # حساب السنة الحالية لمقارنة التواريخ (محدّث تلقائياً)
+    current_year_short = datetime.now().year % 100  # مثلاً 26 لسنة 2026
+    max_expiry_year = datetime.now().year + 20       # حد أعلى معقول للانتهاء
+
     for text in texts:
         raw = re.sub(r'[^A-Za-z0-9<]', '', text)
         clean = fix_mrz(raw)
@@ -85,8 +103,9 @@ def parse_mrz(texts: list) -> dict:
                 dob = clean[13:19]
                 if dob.isdigit():
                     yy, mm, dd = int(dob[0:2]), int(dob[2:4]), int(dob[4:6])
-                    yr = 1900+yy if yy > 24 else 2000+yy
-                    if 1900<=yr<=2024 and 1<=mm<=12 and 1<=dd<=31:
+                    # إذا السنة أكبر من الحالية، اعتبرها من القرن الماضي
+                    yr = 1900+yy if yy > current_year_short else 2000+yy
+                    if 1900<=yr<=datetime.now().year and 1<=mm<=12 and 1<=dd<=31:
                         result['date_of_birth'] = f"{yr}-{mm:02d}-{dd:02d}"
 
                 g = clean[20] if len(clean) > 20 else ''
@@ -97,7 +116,7 @@ def parse_mrz(texts: list) -> dict:
                 if exp.isdigit():
                     yy, mm, dd = int(exp[0:2]), int(exp[2:4]), int(exp[4:6])
                     yr = 2000+yy
-                    if 2024<=yr<=2045 and 1<=mm<=12 and 1<=dd<=31:
+                    if datetime.now().year<=yr<=max_expiry_year and 1<=mm<=12 and 1<=dd<=31:
                         result['expiry_date'] = f"{yr}-{mm:02d}-{dd:02d}"
             except Exception:
                 pass
@@ -144,8 +163,15 @@ def health():
 
 @app.route('/extract-passport', methods=['POST'])
 def extract_passport():
+    # التحقق من API key
+    if not check_api_key():
+        return jsonify({"confidence": 0, "error": "unauthorized"}), 401
+
     try:
-        image_url = request.json.get('image_url')
+        # معالجة آمنة للـ JSON
+        data = request.get_json(silent=True) or {}
+        image_url = data.get('image_url')
+
         if not image_url:
             return jsonify({"confidence": 0, "error": "image_url required"}), 400
 
@@ -187,10 +213,17 @@ def extract_passport():
 
 @app.route('/extract-document', methods=['POST'])
 def extract_document():
+    # التحقق من API key
+    if not check_api_key():
+        return jsonify({"confidence": 0, "error": "unauthorized"}), 401
+
     try:
-        image_url = request.json.get('image_url')
+        # معالجة آمنة للـ JSON
+        data = request.get_json(silent=True) or {}
+        image_url = data.get('image_url')
+
         if not image_url:
-            return jsonify({"confidence": 0}), 400
+            return jsonify({"confidence": 0, "error": "image_url required"}), 400
 
         img_res = requests.get(image_url, timeout=30)
         if img_res.status_code != 200:

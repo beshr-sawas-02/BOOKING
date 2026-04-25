@@ -34,6 +34,20 @@ export class PassportsController {
     return this.passportsService.create(Number(user.user_id), dto);
   }
 
+  // ─────────────────────────────────────────────────────────
+  // ✨ جديد: تحليل صورة بـ OCR بدون حفظ
+  // POST /passports/ocr-preview
+  // body: form-data { image: File }
+  // returns: { image_url, confidence, needs_review, extracted_data }
+  // ─────────────────────────────────────────────────────────
+  @Post('ocr-preview')
+  @UseGuards(RolesGuard)
+  @Roles('user')
+  @UseInterceptors(FileInterceptor('image', imageUploadOptions))
+  previewOcr(@UploadedFile() file: any) {
+    return this.passportsService.previewOcr(file);
+  }
+
   @Get()
   @UseGuards(RolesGuard)
   @Roles('admin')

@@ -32,6 +32,9 @@ let PassportsController = class PassportsController {
     create(user, dto) {
         return this.passportsService.create(Number(user.user_id), dto);
     }
+    previewOcr(file) {
+        return this.passportsService.previewOcr(file);
+    }
     findAll() {
         return this.passportsService.findAll();
     }
@@ -67,6 +70,16 @@ __decorate([
     __metadata("design:paramtypes", [Object, create_passport_dto_1.CreatePassportDto]),
     __metadata("design:returntype", void 0)
 ], PassportsController.prototype, "create", null);
+__decorate([
+    (0, common_1.Post)('ocr-preview'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('user'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('image', multer_config_1.imageUploadOptions)),
+    __param(0, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], PassportsController.prototype, "previewOcr", null);
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),

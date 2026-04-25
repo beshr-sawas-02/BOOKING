@@ -4,12 +4,13 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CloudinaryService } from '../upload/cloudinary.service';
 import { AiService } from '../ai/ai.service';
 import { CreatePassportDto } from './dto/create-passport.dto';
 import { VerifyPassportDto } from './dto/verify-passport.dto';
-import { ImageType } from '../common/enums';
+import { ImageType, Gender } from '../common/enums';
 import { MulterFile } from '../common/types/multer.type';
 
 @Injectable()
@@ -20,12 +21,14 @@ export class PassportsService {
     private aiService: AiService,
   ) {}
 
-  private db(): any {
-    return this.prisma as any;
-  }
-
+  // ─────────────────────────────────────────────────────────
+  // إنشاء جواز جديد + ربطه بالمشارك
+  // يدعم حالتين:
+  //   1. إنشاء عادي (المستخدم يكتب البيانات يدوياً)
+  //   2. إنشاء بعد OCR preview (مع image_url من الـ preview)
+  // ─────────────────────────────────────────────────────────
   async create(userId: number, dto: CreatePassportDto) {
-    const participant = await this.db().bookingParticipant.findUnique({
+    const participant = await this.prisma.bookingParticipant.findUnique({
       where: { participant_id: BigInt(dto.participant_id) },
       include: { booking: true },
     });
@@ -35,10 +38,12 @@ export class PassportsService {
     if (participant.passport_id)
       throw new BadRequestException('Participant already has a passport');
 
-    const passport = await this.db().passport.create({
+    // فصل image_url عن باقي بيانات الجواز
+    const { image_url, participant_id: _ignore, ...passportData } = dto;
+
+    const passport = await this.prisma.passport.create({
       data: {
-        ...dto,
-        participant_id: undefined,
+        ...passportData,
         user_id: BigInt(userId),
         passport_number: dto.passport_number,
         date_of_birth: dto.date_of_birth
@@ -46,26 +51,73 @@ export class PassportsService {
           : undefined,
         issue_date: dto.issue_date ? new Date(dto.issue_date) : undefined,
         expiry_date: dto.expiry_date ? new Date(dto.expiry_date) : undefined,
+        // إذا الصورة جاية من OCR preview، نفعّل ai_extracted
+        ai_extracted: !!image_url,
       },
     });
 
-    await this.db().bookingParticipant.update({
+    // ربط الجواز بالمشارك
+    await this.prisma.bookingParticipant.update({
       where: { participant_id: BigInt(dto.participant_id) },
       data: { passport_id: passport.passport_id },
     });
 
+    // إذا في image_url من preview → احفظ الصورة في passport_images
+    if (image_url) {
+      await this.prisma.passportImage.create({
+        data: {
+          passport_id: passport.passport_id,
+          image_url: image_url,
+          image_type: ImageType.FRONT,
+        },
+      });
+    }
+
     return passport;
   }
 
+  // ─────────────────────────────────────────────────────────
+  // ✨ جديد: تحليل صورة جواز بـ OCR بدون حفظ في DB
+  // يستخدم لمعاينة النتائج قبل إنشاء الجواز
+  // ─────────────────────────────────────────────────────────
+  async previewOcr(file: MulterFile) {
+    if (!file) {
+      throw new BadRequestException('Image file is required');
+    }
+
+    // 1. ارفع الصورة على Cloudinary مؤقتاً
+    const url = await this.cloudinary.uploadFile(file, 'passports/preview');
+
+    // 2. شغّل OCR
+    const extracted = await this.aiService.extractPassportData(url);
+
+    // 3. أرجع النتائج مع رابط الصورة
+    return {
+      image_url: url,
+      confidence: extracted.confidence,
+      needs_review: extracted.needs_review ?? false,
+      extracted_data: {
+        passport_number: extracted.passport_number,
+        full_name_en: extracted.full_name_en,
+        full_name_ar: extracted.full_name_ar,
+        nationality: extracted.nationality,
+        gender: extracted.gender,
+        date_of_birth: extracted.date_of_birth,
+        issue_date: extracted.issue_date,
+        expiry_date: extracted.expiry_date,
+      },
+    };
+  }
+
   async findByBooking(bookingId: number) {
-    return this.db().passport.findMany({
+    return this.prisma.passport.findMany({
       where: { participant: { booking_id: BigInt(bookingId) } },
       include: { passport_images: true, participant: true },
     });
   }
 
   async findAll() {
-    return this.db().passport.findMany({
+    return this.prisma.passport.findMany({
       include: {
         passport_images: true,
         participant: { include: { booking: true } },
@@ -76,7 +128,7 @@ export class PassportsService {
   }
 
   async findPendingVerification() {
-    return this.db().passport.findMany({
+    return this.prisma.passport.findMany({
       where: { verified_by_admin: false },
       include: {
         passport_images: true,
@@ -88,7 +140,7 @@ export class PassportsService {
   }
 
   async findOne(id: number) {
-    const passport = await this.db().passport.findUnique({
+    const passport = await this.prisma.passport.findUnique({
       where: { passport_id: BigInt(id) },
       include: {
         passport_images: true,
@@ -101,7 +153,7 @@ export class PassportsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // رفع صورة الجواز + استدعاء AI تلقائياً
+  // رفع صورة الجواز + استدعاء AI تلقائياً (للجوازات الموجودة)
   // ─────────────────────────────────────────────────────────
   async uploadImage(
     passportId: number,
@@ -118,12 +170,12 @@ export class PassportsService {
     const url = await this.cloudinary.uploadFile(file, 'passports');
 
     // 2. احذف الصورة القديمة من نفس النوع
-    await this.db().passportImage.deleteMany({
+    await this.prisma.passportImage.deleteMany({
       where: { passport_id: BigInt(passportId), image_type: imageType },
     });
 
     // 3. احفظ الصورة الجديدة
-    const image = await this.db().passportImage.create({
+    const image = await this.prisma.passportImage.create({
       data: {
         passport_id: BigInt(passportId),
         image_url: url,
@@ -163,8 +215,8 @@ export class PassportsService {
       return;
     }
 
-    // نبني updateData فقط بالحقول اللي استخرجها OCR فعلاً (لا نكتب undefined)
-    const updateData: any = {
+    // نبني updateData فقط بالحقول اللي استخرجها OCR فعلاً
+    const updateData: Prisma.PassportUpdateInput = {
       ai_extracted: true,
       extraction_confidence: extracted.confidence,
     };
@@ -172,7 +224,7 @@ export class PassportsService {
     if (extracted.full_name_en)
       updateData.full_name_en = extracted.full_name_en;
     if (extracted.nationality) updateData.nationality = extracted.nationality;
-    if (extracted.gender) updateData.gender = extracted.gender as any;
+    if (extracted.gender) updateData.gender = extracted.gender as Gender;
     if (extracted.date_of_birth)
       updateData.date_of_birth = new Date(extracted.date_of_birth);
     if (extracted.issue_date)
@@ -185,7 +237,7 @@ export class PassportsService {
       updateData.passport_number = extracted.passport_number;
     }
 
-    await this.db().passport.update({
+    await this.prisma.passport.update({
       where: { passport_id: BigInt(passportId) },
       data: updateData,
     });
@@ -193,7 +245,7 @@ export class PassportsService {
 
   async verifyPassport(id: number, dto: VerifyPassportDto) {
     await this.findOne(id);
-    return this.db().passport.update({
+    return this.prisma.passport.update({
       where: { passport_id: BigInt(id) },
       data: {
         ...dto,
@@ -210,7 +262,7 @@ export class PassportsService {
     const passport = await this.findOne(id);
     if (!passport.verified_by_admin)
       throw new BadRequestException('Passport must be verified first');
-    return this.db().passport.update({
+    return this.prisma.passport.update({
       where: { passport_id: BigInt(id) },
       data: { sent_to_embassy: true },
     });
@@ -221,7 +273,7 @@ export class PassportsService {
     extractedData: Partial<CreatePassportDto>,
     confidence: number,
   ) {
-    return this.db().passport.update({
+    return this.prisma.passport.update({
       where: { passport_id: BigInt(id) },
       data: {
         ...extractedData,
@@ -239,44 +291,5 @@ export class PassportsService {
           : undefined,
       },
     });
-  }
-
-  // استخدام الـ buffer مباشرة بدل URL (يتجاوز مشكلة Cloudinary allowlist)
-  private async runAiExtractionFromBuffer(
-    passportId: number,
-    buffer: Buffer,
-    mimetype: string,
-  ) {
-    const extracted = await this.aiService.extractPassportDataFromBuffer(
-      buffer,
-      mimetype,
-    );
-    if (extracted.confidence > 0) {
-      // لا نحدّث passport_number من الـ AI إذا كان undefined — منعاً لتعارض الـ unique constraint
-      const updateData: any = {
-        full_name_en: extracted.full_name_en,
-        nationality: extracted.nationality,
-        gender: extracted.gender,
-        date_of_birth: extracted.date_of_birth
-          ? new Date(extracted.date_of_birth)
-          : undefined,
-        issue_date: extracted.issue_date
-          ? new Date(extracted.issue_date)
-          : undefined,
-        expiry_date: extracted.expiry_date
-          ? new Date(extracted.expiry_date)
-          : undefined,
-        ai_extracted: true,
-        extraction_confidence: extracted.confidence,
-      };
-      // نحدّث رقم الجواز فقط إذا استخرجه الـ AI فعلاً (مش Mock)
-      if (extracted.passport_number) {
-        updateData.passport_number = extracted.passport_number;
-      }
-      await this.db().passport.update({
-        where: { passport_id: BigInt(passportId) },
-        data: updateData,
-      });
-    }
   }
 }

@@ -24,11 +24,8 @@ let PassportsService = class PassportsService {
         this.cloudinary = cloudinary;
         this.aiService = aiService;
     }
-    db() {
-        return this.prisma;
-    }
     async create(userId, dto) {
-        const participant = await this.db().bookingParticipant.findUnique({
+        const participant = await this.prisma.bookingParticipant.findUnique({
             where: { participant_id: BigInt(dto.participant_id) },
             include: { booking: true },
         });
@@ -38,10 +35,10 @@ let PassportsService = class PassportsService {
             throw new common_1.ForbiddenException('Access denied');
         if (participant.passport_id)
             throw new common_1.BadRequestException('Participant already has a passport');
-        const passport = await this.db().passport.create({
+        const { image_url, participant_id: _ignore, ...passportData } = dto;
+        const passport = await this.prisma.passport.create({
             data: {
-                ...dto,
-                participant_id: undefined,
+                ...passportData,
                 user_id: BigInt(userId),
                 passport_number: dto.passport_number,
                 date_of_birth: dto.date_of_birth
@@ -49,22 +46,54 @@ let PassportsService = class PassportsService {
                     : undefined,
                 issue_date: dto.issue_date ? new Date(dto.issue_date) : undefined,
                 expiry_date: dto.expiry_date ? new Date(dto.expiry_date) : undefined,
+                ai_extracted: !!image_url,
             },
         });
-        await this.db().bookingParticipant.update({
+        await this.prisma.bookingParticipant.update({
             where: { participant_id: BigInt(dto.participant_id) },
             data: { passport_id: passport.passport_id },
         });
+        if (image_url) {
+            await this.prisma.passportImage.create({
+                data: {
+                    passport_id: passport.passport_id,
+                    image_url: image_url,
+                    image_type: enums_1.ImageType.FRONT,
+                },
+            });
+        }
         return passport;
     }
+    async previewOcr(file) {
+        if (!file) {
+            throw new common_1.BadRequestException('Image file is required');
+        }
+        const url = await this.cloudinary.uploadFile(file, 'passports/preview');
+        const extracted = await this.aiService.extractPassportData(url);
+        return {
+            image_url: url,
+            confidence: extracted.confidence,
+            needs_review: extracted.needs_review ?? false,
+            extracted_data: {
+                passport_number: extracted.passport_number,
+                full_name_en: extracted.full_name_en,
+                full_name_ar: extracted.full_name_ar,
+                nationality: extracted.nationality,
+                gender: extracted.gender,
+                date_of_birth: extracted.date_of_birth,
+                issue_date: extracted.issue_date,
+                expiry_date: extracted.expiry_date,
+            },
+        };
+    }
     async findByBooking(bookingId) {
-        return this.db().passport.findMany({
+        return this.prisma.passport.findMany({
             where: { participant: { booking_id: BigInt(bookingId) } },
             include: { passport_images: true, participant: true },
         });
     }
     async findAll() {
-        return this.db().passport.findMany({
+        return this.prisma.passport.findMany({
             include: {
                 passport_images: true,
                 participant: { include: { booking: true } },
@@ -74,7 +103,7 @@ let PassportsService = class PassportsService {
         });
     }
     async findPendingVerification() {
-        return this.db().passport.findMany({
+        return this.prisma.passport.findMany({
             where: { verified_by_admin: false },
             include: {
                 passport_images: true,
@@ -85,7 +114,7 @@ let PassportsService = class PassportsService {
         });
     }
     async findOne(id) {
-        const passport = await this.db().passport.findUnique({
+        const passport = await this.prisma.passport.findUnique({
             where: { passport_id: BigInt(id) },
             include: {
                 passport_images: true,
@@ -102,10 +131,10 @@ let PassportsService = class PassportsService {
         if (!isAdmin && passport.user_id.toString() !== userId.toString())
             throw new common_1.ForbiddenException('Access denied');
         const url = await this.cloudinary.uploadFile(file, 'passports');
-        await this.db().passportImage.deleteMany({
+        await this.prisma.passportImage.deleteMany({
             where: { passport_id: BigInt(passportId), image_type: imageType },
         });
-        const image = await this.db().passportImage.create({
+        const image = await this.prisma.passportImage.create({
             data: {
                 passport_id: BigInt(passportId),
                 image_url: url,
@@ -152,14 +181,14 @@ let PassportsService = class PassportsService {
         if (extracted.passport_number) {
             updateData.passport_number = extracted.passport_number;
         }
-        await this.db().passport.update({
+        await this.prisma.passport.update({
             where: { passport_id: BigInt(passportId) },
             data: updateData,
         });
     }
     async verifyPassport(id, dto) {
         await this.findOne(id);
-        return this.db().passport.update({
+        return this.prisma.passport.update({
             where: { passport_id: BigInt(id) },
             data: {
                 ...dto,
@@ -175,13 +204,13 @@ let PassportsService = class PassportsService {
         const passport = await this.findOne(id);
         if (!passport.verified_by_admin)
             throw new common_1.BadRequestException('Passport must be verified first');
-        return this.db().passport.update({
+        return this.prisma.passport.update({
             where: { passport_id: BigInt(id) },
             data: { sent_to_embassy: true },
         });
     }
     async saveAiExtraction(id, extractedData, confidence) {
-        return this.db().passport.update({
+        return this.prisma.passport.update({
             where: { passport_id: BigInt(id) },
             data: {
                 ...extractedData,
@@ -199,34 +228,6 @@ let PassportsService = class PassportsService {
                     : undefined,
             },
         });
-    }
-    async runAiExtractionFromBuffer(passportId, buffer, mimetype) {
-        const extracted = await this.aiService.extractPassportDataFromBuffer(buffer, mimetype);
-        if (extracted.confidence > 0) {
-            const updateData = {
-                full_name_en: extracted.full_name_en,
-                nationality: extracted.nationality,
-                gender: extracted.gender,
-                date_of_birth: extracted.date_of_birth
-                    ? new Date(extracted.date_of_birth)
-                    : undefined,
-                issue_date: extracted.issue_date
-                    ? new Date(extracted.issue_date)
-                    : undefined,
-                expiry_date: extracted.expiry_date
-                    ? new Date(extracted.expiry_date)
-                    : undefined,
-                ai_extracted: true,
-                extraction_confidence: extracted.confidence,
-            };
-            if (extracted.passport_number) {
-                updateData.passport_number = extracted.passport_number;
-            }
-            await this.db().passport.update({
-                where: { passport_id: BigInt(passportId) },
-                data: updateData,
-            });
-        }
     }
 };
 exports.PassportsService = PassportsService;

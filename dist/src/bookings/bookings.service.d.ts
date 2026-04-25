@@ -114,9 +114,9 @@ export declare class BookingsService {
             booking_id: bigint;
             embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
             passport_id: bigint;
+            uploaded_at: Date;
             notes: string | null;
             result_id: bigint;
-            uploaded_at: Date;
         }[];
     } & {
         created_at: Date;
@@ -173,9 +173,9 @@ export declare class BookingsService {
                 passport_images: {
                     passport_id: bigint;
                     image_url: string;
-                    uploaded_at: Date;
-                    image_id: bigint;
                     image_type: import(".prisma/client").$Enums.ImageType;
+                    image_id: bigint;
+                    uploaded_at: Date;
                 }[];
             } & {
                 created_at: Date;
@@ -238,9 +238,9 @@ export declare class BookingsService {
             booking_id: bigint;
             embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
             passport_id: bigint;
+            uploaded_at: Date;
             notes: string | null;
             result_id: bigint;
-            uploaded_at: Date;
         }[];
     } & {
         created_at: Date;
@@ -322,9 +322,9 @@ export declare class BookingsService {
             booking_id: bigint;
             embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
             passport_id: bigint;
+            uploaded_at: Date;
             notes: string | null;
             result_id: bigint;
-            uploaded_at: Date;
         }[];
     } & {
         created_at: Date;

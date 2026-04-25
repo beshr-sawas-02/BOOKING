@@ -22,6 +22,7 @@ class CreatePassportDto {
     date_of_birth;
     issue_date;
     expiry_date;
+    image_url;
 }
 exports.CreatePassportDto = CreatePassportDto;
 __decorate([
@@ -67,4 +68,9 @@ __decorate([
     (0, class_validator_1.IsDateString)(),
     __metadata("design:type", String)
 ], CreatePassportDto.prototype, "expiry_date", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsUrl)(),
+    __metadata("design:type", String)
+], CreatePassportDto.prototype, "image_url", void 0);
 //# sourceMappingURL=create-passport.dto.js.map
