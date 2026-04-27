@@ -22,6 +22,7 @@ class VerifyPassportDto {
     issue_date;
     expiry_date;
     verified_by_admin;
+    rejection_reason;
 }
 exports.VerifyPassportDto = VerifyPassportDto;
 __decorate([
@@ -68,4 +69,9 @@ __decorate([
     (0, class_validator_1.IsBoolean)(),
     __metadata("design:type", Boolean)
 ], VerifyPassportDto.prototype, "verified_by_admin", void 0);
+__decorate([
+    (0, class_validator_1.ValidateIf)((o) => o.verified_by_admin === false),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], VerifyPassportDto.prototype, "rejection_reason", void 0);
 //# sourceMappingURL=verify-passport.dto.js.map

@@ -14,6 +14,7 @@ const class_validator_1 = require("class-validator");
 const enums_1 = require("../../common/enums");
 class UpdateBookingStatusDto {
     booking_status;
+    rejection_reason;
     reason;
 }
 exports.UpdateBookingStatusDto = UpdateBookingStatusDto;
@@ -21,6 +22,11 @@ __decorate([
     (0, class_validator_1.IsEnum)(enums_1.BookingStatus),
     __metadata("design:type", String)
 ], UpdateBookingStatusDto.prototype, "booking_status", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdateBookingStatusDto.prototype, "rejection_reason", void 0);
 __decorate([
     (0, class_validator_1.IsOptional)(),
     (0, class_validator_1.IsString)(),

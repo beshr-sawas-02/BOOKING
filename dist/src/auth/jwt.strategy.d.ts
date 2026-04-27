@@ -15,8 +15,10 @@ export declare class JwtStrategy extends JwtStrategy_base {
     }): Promise<{
         admin_id: string;
         role: string;
+        admin_role: import(".prisma/client").$Enums.AdminRole;
         email: string;
         full_name: string;
+        is_active: boolean;
         last_login: Date | null;
         created_at: Date;
     } | {
@@ -24,6 +26,7 @@ export declare class JwtStrategy extends JwtStrategy_base {
         role: string;
         email: string;
         full_name: string;
+        is_active: boolean;
         created_at: Date;
         phone_number: string | null;
         email_verified: boolean;

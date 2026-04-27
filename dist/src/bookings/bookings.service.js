@@ -13,6 +13,7 @@ exports.BookingsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const enums_1 = require("../common/enums");
+const pagination_dto_1 = require("../common/dto/pagination.dto");
 const mahram_validator_1 = require("./validators/mahram.validator");
 let BookingsService = class BookingsService {
     prisma;
@@ -94,28 +95,82 @@ let BookingsService = class BookingsService {
         };
     }
     async findAll(filters) {
-        return this.prisma.booking.findMany({
-            where: {
-                ...(filters?.status && { booking_status: filters.status }),
-                ...(filters?.userId && { user_id: BigInt(filters.userId) }),
-            },
-            include: {
-                user: {
-                    select: {
-                        user_id: true,
-                        full_name: true,
-                        email: true,
-                        phone_number: true,
+        const page = filters.page ?? 1;
+        const limit = filters.limit ?? 10;
+        const search = filters.search?.trim();
+        const where = this.buildWhereClause(filters, search);
+        const { skip, take } = (0, pagination_dto_1.getPaginationParams)(page, limit);
+        const [total, bookings] = await Promise.all([
+            this.prisma.booking.count({ where }),
+            this.prisma.booking.findMany({
+                where,
+                skip,
+                take,
+                include: {
+                    user: {
+                        select: {
+                            user_id: true,
+                            full_name: true,
+                            email: true,
+                            phone_number: true,
+                        },
+                    },
+                    package: {
+                        select: {
+                            package_id: true,
+                            package_title: true,
+                            package_type: true,
+                            duration_days: true,
+                        },
+                    },
+                    booking_participants: {
+                        select: {
+                            participant_id: true,
+                            full_name: true,
+                            relation_type: true,
+                            is_primary: true,
+                            passport_id: true,
+                        },
+                    },
+                    _count: {
+                        select: {
+                            booking_participants: true,
+                            embassy_results: true,
+                            family_proof_documents: true,
+                        },
                     },
                 },
-                package: true,
-                booking_participants: {
-                    include: { passport: true, family_proof: true },
+                orderBy: { created_at: 'desc' },
+            }),
+        ]);
+        return (0, pagination_dto_1.buildPaginatedResponse)(bookings, total, page, limit);
+    }
+    async findMyBookings(userId, filters) {
+        const page = filters.page ?? 1;
+        const limit = filters.limit ?? 10;
+        const where = {
+            user_id: BigInt(userId),
+            ...(filters.status && { booking_status: filters.status }),
+        };
+        const { skip, take } = (0, pagination_dto_1.getPaginationParams)(page, limit);
+        const [total, bookings] = await Promise.all([
+            this.prisma.booking.count({ where }),
+            this.prisma.booking.findMany({
+                where,
+                skip,
+                take,
+                include: {
+                    package: true,
+                    booking_participants: {
+                        include: { passport: true, family_proof: true },
+                    },
+                    embassy_results: true,
+                    review: true,
                 },
-                embassy_results: true,
-            },
-            orderBy: { created_at: 'desc' },
-        });
+                orderBy: { created_at: 'desc' },
+            }),
+        ]);
+        return (0, pagination_dto_1.buildPaginatedResponse)(bookings, total, page, limit);
     }
     async findOne(id) {
         const booking = await this.prisma.booking.findUnique({
@@ -127,25 +182,36 @@ let BookingsService = class BookingsService {
                         full_name: true,
                         email: true,
                         phone_number: true,
+                        is_active: true,
                     },
                 },
-                package: { include: { package_hotels: { include: { hotel: true } } } },
+                package: {
+                    include: { package_hotels: { include: { hotel: true } } },
+                },
                 booking_participants: {
                     include: {
                         passport: { include: { passport_images: true } },
                         family_proof: true,
                     },
                 },
-                embassy_results: true,
+                embassy_results: {
+                    include: {
+                        passport: {
+                            select: {
+                                passport_id: true,
+                                full_name_en: true,
+                                passport_number: true,
+                            },
+                        },
+                    },
+                },
                 family_proof_documents: true,
+                review: true,
             },
         });
         if (!booking)
             throw new common_1.NotFoundException('Booking not found');
         return booking;
-    }
-    async findMyBookings(userId) {
-        return this.findAll({ userId });
     }
     async updateStatus(id, dto) {
         const booking = await this.findOne(id);
@@ -166,9 +232,19 @@ let BookingsService = class BookingsService {
         if (!validTransitions[booking.booking_status].includes(dto.booking_status)) {
             throw new common_1.BadRequestException(`لا يمكن التحول من ${booking.booking_status} إلى ${dto.booking_status}`);
         }
+        if (dto.booking_status === enums_1.BookingStatus.REJECTED) {
+            const reason = dto.rejection_reason || dto.reason;
+            if (!reason || !reason.trim()) {
+                throw new common_1.BadRequestException('سبب الرفض مطلوب');
+            }
+        }
         return this.prisma.booking.update({
             where: { booking_id: BigInt(id) },
             data: { booking_status: dto.booking_status },
+            include: {
+                user: { select: { full_name: true, email: true } },
+                package: { select: { package_title: true } },
+            },
         });
     }
     async cancel(id, userId) {
@@ -209,6 +285,38 @@ let BookingsService = class BookingsService {
                     : undefined,
             },
         });
+    }
+    buildWhereClause(filters, search) {
+        const where = {};
+        if (filters.status) {
+            where.booking_status = filters.status;
+        }
+        if (filters.package_type) {
+            where.package = { package_type: filters.package_type };
+        }
+        if (filters.from_date || filters.to_date) {
+            where.created_at = {
+                ...(filters.from_date && { gte: new Date(filters.from_date) }),
+                ...(filters.to_date && { lte: new Date(filters.to_date) }),
+            };
+        }
+        if (search) {
+            where.OR = [
+                { user: { full_name: { contains: search, mode: 'insensitive' } } },
+                { user: { email: { contains: search, mode: 'insensitive' } } },
+                {
+                    user: {
+                        phone_number: { contains: search, mode: 'insensitive' },
+                    },
+                },
+                {
+                    package: {
+                        package_title: { contains: search, mode: 'insensitive' },
+                    },
+                },
+            ];
+        }
+        return where;
     }
 };
 exports.BookingsService = BookingsService;

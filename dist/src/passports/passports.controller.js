@@ -18,6 +18,7 @@ const platform_express_1 = require("@nestjs/platform-express");
 const passports_service_1 = require("./passports.service");
 const create_passport_dto_1 = require("./dto/create-passport.dto");
 const verify_passport_dto_1 = require("./dto/verify-passport.dto");
+const passports_filter_dto_1 = require("./dto/passports-filter.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
@@ -35,11 +36,14 @@ let PassportsController = class PassportsController {
     previewOcr(file) {
         return this.passportsService.previewOcr(file);
     }
-    findAll() {
-        return this.passportsService.findAll();
+    findAll(query) {
+        return this.passportsService.findAll(query);
     }
-    findPending() {
-        return this.passportsService.findPendingVerification();
+    findPending(query) {
+        return this.passportsService.findPendingVerification(query);
+    }
+    getStats() {
+        return this.passportsService.getStats();
     }
     findByBooking(bookingId) {
         return this.passportsService.findByBooking(bookingId);
@@ -84,18 +88,28 @@ __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('admin'),
+    __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [passports_filter_dto_1.PassportsFilterDto]),
     __metadata("design:returntype", void 0)
 ], PassportsController.prototype, "findAll", null);
 __decorate([
     (0, common_1.Get)('pending'),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('admin'),
+    __param(0, (0, common_1.Query)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [passports_filter_dto_1.PassportsFilterDto]),
+    __metadata("design:returntype", void 0)
+], PassportsController.prototype, "findPending", null);
+__decorate([
+    (0, common_1.Get)('stats'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
     __metadata("design:type", Function),
     __metadata("design:paramtypes", []),
     __metadata("design:returntype", void 0)
-], PassportsController.prototype, "findPending", null);
+], PassportsController.prototype, "getStats", null);
 __decorate([
     (0, common_1.Get)('booking/:bookingId'),
     __param(0, (0, common_1.Param)('bookingId', common_1.ParseIntPipe)),

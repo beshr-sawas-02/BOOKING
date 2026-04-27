@@ -24,15 +24,30 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       });
       if (!admin) throw new UnauthorizedException();
 
+      // ✨ التحقق من أن الأدمن مفعّل
+      if (!admin.is_active) {
+        throw new UnauthorizedException('تم تعطيل هذا الحساب');
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { password, ...rest } = admin;
-      return { ...rest, admin_id: rest.admin_id.toString(), role: 'admin' };
+      return {
+        ...rest,
+        admin_id: rest.admin_id.toString(),
+        role: 'admin',           // JWT role (للـ RolesGuard)
+        admin_role: rest.role,   // الـ role الفعلي (SUPER_ADMIN/ADMIN) للـ SuperAdminGuard
+      };
     }
 
     const user = await this.prisma.user.findUnique({
       where: { user_id: BigInt(payload.sub) },
     });
     if (!user) throw new UnauthorizedException();
+
+    // ✨ التحقق من أن المستخدم مفعّل
+    if (!user.is_active) {
+      throw new UnauthorizedException('تم تعطيل هذا الحساب');
+    }
 
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { password, ...rest } = user;

@@ -16,10 +16,10 @@ exports.EmbassyController = void 0;
 const common_1 = require("@nestjs/common");
 const embassy_service_1 = require("./embassy.service");
 const update_embassy_result_dto_1 = require("./dto/update-embassy-result.dto");
+const embassy_filter_dto_1 = require("./dto/embassy-filter.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
-const enums_1 = require("../common/enums");
 let EmbassyController = class EmbassyController {
     embassyService;
     constructor(embassyService) {
@@ -28,11 +28,14 @@ let EmbassyController = class EmbassyController {
     getStats() {
         return this.embassyService.getStats();
     }
-    findAll(status) {
-        return this.embassyService.findAll(status);
+    findAll(query) {
+        return this.embassyService.findAll(query);
     }
     findByBooking(bookingId) {
         return this.embassyService.findByBooking(bookingId);
+    }
+    findOne(resultId) {
+        return this.embassyService.findOne(resultId);
     }
     submitToEmbassy(bookingId) {
         return this.embassyService.submitBookingToEmbassy(bookingId);
@@ -50,9 +53,9 @@ __decorate([
 ], EmbassyController.prototype, "getStats", null);
 __decorate([
     (0, common_1.Get)(),
-    __param(0, (0, common_1.Query)('status')),
+    __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", [String]),
+    __metadata("design:paramtypes", [embassy_filter_dto_1.EmbassyFilterDto]),
     __metadata("design:returntype", void 0)
 ], EmbassyController.prototype, "findAll", null);
 __decorate([
@@ -62,6 +65,13 @@ __decorate([
     __metadata("design:paramtypes", [Number]),
     __metadata("design:returntype", void 0)
 ], EmbassyController.prototype, "findByBooking", null);
+__decorate([
+    (0, common_1.Get)(':resultId'),
+    __param(0, (0, common_1.Param)('resultId', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", void 0)
+], EmbassyController.prototype, "findOne", null);
 __decorate([
     (0, common_1.Post)('submit/:bookingId'),
     __param(0, (0, common_1.Param)('bookingId', common_1.ParseIntPipe)),

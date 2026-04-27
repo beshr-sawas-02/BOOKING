@@ -13,6 +13,8 @@ exports.FamilyProofService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const cloudinary_service_1 = require("../upload/cloudinary.service");
+const enums_1 = require("../common/enums");
+const pagination_dto_1 = require("../common/dto/pagination.dto");
 let FamilyProofService = class FamilyProofService {
     prisma;
     cloudinary;
@@ -20,11 +22,11 @@ let FamilyProofService = class FamilyProofService {
         this.prisma = prisma;
         this.cloudinary = cloudinary;
     }
-    db() {
-        return this.prisma;
-    }
     async upload(userId, file, dto) {
-        const booking = await this.db().booking.findUnique({
+        if (!file) {
+            throw new common_1.BadRequestException('Document file is required');
+        }
+        const booking = await this.prisma.booking.findUnique({
             where: { booking_id: BigInt(dto.booking_id) },
         });
         if (!booking)
@@ -32,7 +34,7 @@ let FamilyProofService = class FamilyProofService {
         if (booking.user_id.toString() !== userId.toString())
             throw new common_1.ForbiddenException('Access denied');
         const url = await this.cloudinary.uploadFile(file, 'family-proof');
-        const doc = await this.db().familyProofDocument.create({
+        const doc = await this.prisma.familyProofDocument.create({
             data: {
                 uploaded_by: BigInt(userId),
                 booking_id: BigInt(dto.booking_id),
@@ -42,30 +44,223 @@ let FamilyProofService = class FamilyProofService {
                 mother_name: dto.mother_name,
             },
         });
-        return { ...doc, message: 'تم رفع الوثيقة بنجاح، بانتظار مراجعة الأدمن' };
+        return {
+            ...doc,
+            message: 'تم رفع الوثيقة بنجاح، بانتظار مراجعة الأدمن',
+        };
+    }
+    async findAll(filters) {
+        const page = filters.page ?? 1;
+        const limit = filters.limit ?? 10;
+        const search = filters.search?.trim();
+        const where = this.buildWhereClause(filters, search);
+        const { skip, take } = (0, pagination_dto_1.getPaginationParams)(page, limit);
+        const [total, docs] = await Promise.all([
+            this.prisma.familyProofDocument.count({ where }),
+            this.prisma.familyProofDocument.findMany({
+                where,
+                skip,
+                take,
+                include: {
+                    uploader: {
+                        select: {
+                            user_id: true,
+                            full_name: true,
+                            email: true,
+                            phone_number: true,
+                        },
+                    },
+                    booking: {
+                        select: {
+                            booking_id: true,
+                            booking_status: true,
+                            package: {
+                                select: {
+                                    package_id: true,
+                                    package_title: true,
+                                    package_type: true,
+                                },
+                            },
+                        },
+                    },
+                    _count: { select: { booking_participants: true } },
+                },
+                orderBy: { created_at: 'desc' },
+            }),
+        ]);
+        return (0, pagination_dto_1.buildPaginatedResponse)(docs, total, page, limit);
+    }
+    async findPending(filters) {
+        const page = filters.page ?? 1;
+        const limit = filters.limit ?? 10;
+        const where = {
+            verification_status: enums_1.VerificationStatus.PENDING,
+        };
+        const { skip, take } = (0, pagination_dto_1.getPaginationParams)(page, limit);
+        const [total, docs] = await Promise.all([
+            this.prisma.familyProofDocument.count({ where }),
+            this.prisma.familyProofDocument.findMany({
+                where,
+                skip,
+                take,
+                include: {
+                    uploader: {
+                        select: {
+                            user_id: true,
+                            full_name: true,
+                            email: true,
+                            phone_number: true,
+                        },
+                    },
+                    booking: {
+                        include: {
+                            package: true,
+                            booking_participants: {
+                                select: {
+                                    participant_id: true,
+                                    full_name: true,
+                                    relation_type: true,
+                                    is_primary: true,
+                                },
+                            },
+                        },
+                    },
+                },
+                orderBy: { created_at: 'asc' },
+            }),
+        ]);
+        return (0, pagination_dto_1.buildPaginatedResponse)(docs, total, page, limit);
+    }
+    async getStats() {
+        const [total, pending, approved, rejected] = await Promise.all([
+            this.prisma.familyProofDocument.count(),
+            this.prisma.familyProofDocument.count({
+                where: { verification_status: enums_1.VerificationStatus.PENDING },
+            }),
+            this.prisma.familyProofDocument.count({
+                where: { verification_status: enums_1.VerificationStatus.APPROVED },
+            }),
+            this.prisma.familyProofDocument.count({
+                where: { verification_status: enums_1.VerificationStatus.REJECTED },
+            }),
+        ]);
+        return { total, pending, approved, rejected };
     }
     async findByBooking(bookingId) {
-        return this.db().familyProofDocument.findMany({
+        return this.prisma.familyProofDocument.findMany({
             where: { booking_id: BigInt(bookingId) },
-            include: { uploader: { select: { full_name: true, email: true } } },
+            include: {
+                uploader: {
+                    select: { user_id: true, full_name: true, email: true },
+                },
+                booking_participants: {
+                    select: {
+                        participant_id: true,
+                        full_name: true,
+                        relation_type: true,
+                    },
+                },
+            },
+            orderBy: { created_at: 'desc' },
         });
     }
-    async verify(documentId, status) {
-        const doc = await this.db().familyProofDocument.findUnique({
+    async findOne(id) {
+        const doc = await this.prisma.familyProofDocument.findUnique({
+            where: { document_id: BigInt(id) },
+            include: {
+                uploader: {
+                    select: {
+                        user_id: true,
+                        full_name: true,
+                        email: true,
+                        phone_number: true,
+                    },
+                },
+                booking: {
+                    include: {
+                        package: true,
+                        booking_participants: true,
+                    },
+                },
+                booking_participants: true,
+            },
+        });
+        if (!doc)
+            throw new common_1.NotFoundException('Document not found');
+        return doc;
+    }
+    async verify(documentId, dto) {
+        const doc = await this.prisma.familyProofDocument.findUnique({
             where: { document_id: BigInt(documentId) },
         });
         if (!doc)
             throw new common_1.NotFoundException('Document not found');
-        return this.db().familyProofDocument.update({
+        if (dto.status === enums_1.VerificationStatus.REJECTED &&
+            (!dto.rejection_reason || !dto.rejection_reason.trim())) {
+            throw new common_1.BadRequestException('سبب الرفض مطلوب');
+        }
+        return this.prisma.familyProofDocument.update({
             where: { document_id: BigInt(documentId) },
-            data: { verification_status: status },
+            data: {
+                verification_status: dto.status,
+                rejection_reason: dto.status === enums_1.VerificationStatus.REJECTED
+                    ? dto.rejection_reason.trim()
+                    : null,
+            },
+            include: {
+                uploader: { select: { full_name: true, email: true } },
+                booking: {
+                    select: { booking_id: true, package: { select: { package_title: true } } },
+                },
+            },
         });
     }
     async linkToParticipant(documentId, participantId) {
-        return this.db().bookingParticipant.update({
+        const [doc, participant] = await Promise.all([
+            this.prisma.familyProofDocument.findUnique({
+                where: { document_id: BigInt(documentId) },
+            }),
+            this.prisma.bookingParticipant.findUnique({
+                where: { participant_id: BigInt(participantId) },
+            }),
+        ]);
+        if (!doc)
+            throw new common_1.NotFoundException('Document not found');
+        if (!participant)
+            throw new common_1.NotFoundException('Participant not found');
+        if (participant.booking_id.toString() !== doc.booking_id.toString()) {
+            throw new common_1.BadRequestException('المشارك ليس من نفس الحجز');
+        }
+        return this.prisma.bookingParticipant.update({
             where: { participant_id: BigInt(participantId) },
             data: { family_proof_id: BigInt(documentId) },
+            include: { family_proof: true },
         });
+    }
+    buildWhereClause(filters, search) {
+        const where = {};
+        if (filters.status) {
+            where.verification_status = filters.status;
+        }
+        if (filters.booking_id) {
+            where.booking_id = BigInt(filters.booking_id);
+        }
+        if (search) {
+            where.OR = [
+                { document_type: { contains: search, mode: 'insensitive' } },
+                { father_name: { contains: search, mode: 'insensitive' } },
+                { mother_name: { contains: search, mode: 'insensitive' } },
+                {
+                    uploader: {
+                        OR: [
+                            { full_name: { contains: search, mode: 'insensitive' } },
+                            { email: { contains: search, mode: 'insensitive' } },
+                        ],
+                    },
+                },
+            ];
+        }
+        return where;
     }
 };
 exports.FamilyProofService = FamilyProofService;

@@ -9,4 +9,5 @@ export declare class VerifyPassportDto {
     issue_date?: string;
     expiry_date?: string;
     verified_by_admin: boolean;
+    rejection_reason?: string;
 }

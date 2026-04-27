@@ -15,6 +15,7 @@ const prisma_service_1 = require("../prisma/prisma.service");
 const cloudinary_service_1 = require("../upload/cloudinary.service");
 const ai_service_1 = require("../ai/ai.service");
 const enums_1 = require("../common/enums");
+const pagination_dto_1 = require("../common/dto/pagination.dto");
 let PassportsService = class PassportsService {
     prisma;
     cloudinary;
@@ -86,39 +87,130 @@ let PassportsService = class PassportsService {
             },
         };
     }
+    async findAll(filters) {
+        const page = filters.page ?? 1;
+        const limit = filters.limit ?? 10;
+        const search = filters.search?.trim();
+        const where = this.buildWhereClause(filters, search);
+        const { skip, take } = (0, pagination_dto_1.getPaginationParams)(page, limit);
+        const [total, passports] = await Promise.all([
+            this.prisma.passport.count({ where }),
+            this.prisma.passport.findMany({
+                where,
+                skip,
+                take,
+                include: {
+                    passport_images: { orderBy: { uploaded_at: 'desc' } },
+                    participant: {
+                        include: {
+                            booking: {
+                                select: {
+                                    booking_id: true,
+                                    booking_status: true,
+                                    package: { select: { package_title: true } },
+                                },
+                            },
+                        },
+                    },
+                    user: {
+                        select: { user_id: true, full_name: true, email: true },
+                    },
+                },
+                orderBy: { created_at: 'desc' },
+            }),
+        ]);
+        return (0, pagination_dto_1.buildPaginatedResponse)(passports, total, page, limit);
+    }
+    async findPendingVerification(filters) {
+        const page = filters.page ?? 1;
+        const limit = filters.limit ?? 10;
+        const where = {
+            verified_by_admin: false,
+            rejection_reason: null,
+        };
+        const { skip, take } = (0, pagination_dto_1.getPaginationParams)(page, limit);
+        const [total, passports] = await Promise.all([
+            this.prisma.passport.count({ where }),
+            this.prisma.passport.findMany({
+                where,
+                skip,
+                take,
+                include: {
+                    passport_images: true,
+                    participant: {
+                        include: {
+                            booking: { include: { package: true } },
+                        },
+                    },
+                    user: {
+                        select: { user_id: true, full_name: true, email: true },
+                    },
+                },
+                orderBy: [
+                    { extraction_confidence: { sort: 'asc', nulls: 'last' } },
+                    { created_at: 'asc' },
+                ],
+            }),
+        ]);
+        return (0, pagination_dto_1.buildPaginatedResponse)(passports, total, page, limit);
+    }
+    async getStats() {
+        const [total, verified, pending, rejected, sentToEmbassy, lowConfidence, aiExtracted,] = await Promise.all([
+            this.prisma.passport.count(),
+            this.prisma.passport.count({ where: { verified_by_admin: true } }),
+            this.prisma.passport.count({
+                where: { verified_by_admin: false, rejection_reason: null },
+            }),
+            this.prisma.passport.count({
+                where: { rejection_reason: { not: null } },
+            }),
+            this.prisma.passport.count({ where: { sent_to_embassy: true } }),
+            this.prisma.passport.count({
+                where: {
+                    extraction_confidence: { lt: 0.6 },
+                    verified_by_admin: false,
+                },
+            }),
+            this.prisma.passport.count({ where: { ai_extracted: true } }),
+        ]);
+        return {
+            total,
+            verified,
+            pending,
+            rejected,
+            sentToEmbassy,
+            lowConfidence,
+            aiExtracted,
+        };
+    }
     async findByBooking(bookingId) {
         return this.prisma.passport.findMany({
             where: { participant: { booking_id: BigInt(bookingId) } },
             include: { passport_images: true, participant: true },
         });
     }
-    async findAll() {
-        return this.prisma.passport.findMany({
-            include: {
-                passport_images: true,
-                participant: { include: { booking: true } },
-                user: { select: { user_id: true, full_name: true, email: true } },
-            },
-            orderBy: { created_at: 'desc' },
-        });
-    }
-    async findPendingVerification() {
-        return this.prisma.passport.findMany({
-            where: { verified_by_admin: false },
-            include: {
-                passport_images: true,
-                participant: { include: { booking: { include: { package: true } } } },
-                user: { select: { user_id: true, full_name: true, email: true } },
-            },
-            orderBy: { created_at: 'asc' },
-        });
-    }
     async findOne(id) {
         const passport = await this.prisma.passport.findUnique({
             where: { passport_id: BigInt(id) },
             include: {
-                passport_images: true,
-                participant: { include: { booking: true } },
+                passport_images: { orderBy: { uploaded_at: 'desc' } },
+                participant: {
+                    include: {
+                        booking: {
+                            include: {
+                                package: true,
+                                user: {
+                                    select: {
+                                        user_id: true,
+                                        full_name: true,
+                                        email: true,
+                                        phone_number: true,
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
                 embassy_results: true,
             },
         });
@@ -188,15 +280,38 @@ let PassportsService = class PassportsService {
     }
     async verifyPassport(id, dto) {
         await this.findOne(id);
+        if (dto.verified_by_admin === false &&
+            (!dto.rejection_reason || !dto.rejection_reason.trim())) {
+            throw new common_1.BadRequestException('سبب الرفض مطلوب');
+        }
+        const { rejection_reason, verified_by_admin, ...passportData } = dto;
+        const updateData = {
+            ...passportData,
+            verified_by_admin,
+            rejection_reason: verified_by_admin
+                ? null
+                : rejection_reason?.trim() ?? null,
+            date_of_birth: dto.date_of_birth
+                ? new Date(dto.date_of_birth)
+                : undefined,
+            issue_date: dto.issue_date ? new Date(dto.issue_date) : undefined,
+            expiry_date: dto.expiry_date ? new Date(dto.expiry_date) : undefined,
+        };
         return this.prisma.passport.update({
             where: { passport_id: BigInt(id) },
-            data: {
-                ...dto,
-                date_of_birth: dto.date_of_birth
-                    ? new Date(dto.date_of_birth)
-                    : undefined,
-                issue_date: dto.issue_date ? new Date(dto.issue_date) : undefined,
-                expiry_date: dto.expiry_date ? new Date(dto.expiry_date) : undefined,
+            data: updateData,
+            include: {
+                passport_images: true,
+                participant: {
+                    include: {
+                        booking: {
+                            select: {
+                                booking_id: true,
+                                user: { select: { full_name: true, email: true } },
+                            },
+                        },
+                    },
+                },
             },
         });
     }
@@ -228,6 +343,46 @@ let PassportsService = class PassportsService {
                     : undefined,
             },
         });
+    }
+    buildWhereClause(filters, search) {
+        const where = {};
+        if (filters.verified !== undefined) {
+            where.verified_by_admin = filters.verified;
+        }
+        if (filters.sent_to_embassy !== undefined) {
+            where.sent_to_embassy = filters.sent_to_embassy;
+        }
+        if (filters.confidence_level === 'low') {
+            where.extraction_confidence = { lt: 0.6 };
+        }
+        else if (filters.confidence_level === 'medium') {
+            where.extraction_confidence = { gte: 0.6, lt: 0.8 };
+        }
+        else if (filters.confidence_level === 'high') {
+            where.extraction_confidence = { gte: 0.8 };
+        }
+        if (filters.booking_id) {
+            where.participant = {
+                booking_id: BigInt(filters.booking_id),
+            };
+        }
+        if (search) {
+            where.OR = [
+                { passport_number: { contains: search, mode: 'insensitive' } },
+                { full_name_en: { contains: search, mode: 'insensitive' } },
+                { full_name_ar: { contains: search, mode: 'insensitive' } },
+                { nationality: { contains: search, mode: 'insensitive' } },
+                {
+                    user: {
+                        OR: [
+                            { full_name: { contains: search, mode: 'insensitive' } },
+                            { email: { contains: search, mode: 'insensitive' } },
+                        ],
+                    },
+                },
+            ];
+        }
+        return where;
     }
 };
 exports.PassportsService = PassportsService;

@@ -20,6 +20,7 @@ const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
 const current_user_decorator_1 = require("../common/decorators/current-user.decorator");
+const pagination_dto_1 = require("../common/dto/pagination.dto");
 let UsersController = class UsersController {
     usersService;
     constructor(usersService) {
@@ -31,11 +32,14 @@ let UsersController = class UsersController {
     updateProfile(user, dto) {
         return this.usersService.update(Number(user.user_id), dto);
     }
-    findAll() {
-        return this.usersService.findAll();
+    findAll(query) {
+        return this.usersService.findAll(query);
     }
     findOne(id) {
         return this.usersService.findOne(id);
+    }
+    toggleActive(id) {
+        return this.usersService.toggleActive(id);
     }
 };
 exports.UsersController = UsersController;
@@ -58,8 +62,9 @@ __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
     (0, roles_decorator_1.Roles)('admin'),
+    __param(0, (0, common_1.Query)()),
     __metadata("design:type", Function),
-    __metadata("design:paramtypes", []),
+    __metadata("design:paramtypes", [pagination_dto_1.PaginationDto]),
     __metadata("design:returntype", void 0)
 ], UsersController.prototype, "findAll", null);
 __decorate([
@@ -71,6 +76,15 @@ __decorate([
     __metadata("design:paramtypes", [Number]),
     __metadata("design:returntype", void 0)
 ], UsersController.prototype, "findOne", null);
+__decorate([
+    (0, common_1.Patch)(':id/toggle-active'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('admin'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number]),
+    __metadata("design:returntype", void 0)
+], UsersController.prototype, "toggleActive", null);
 exports.UsersController = UsersController = __decorate([
     (0, common_1.Controller)('users'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

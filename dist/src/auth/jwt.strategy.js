@@ -34,14 +34,25 @@ let JwtStrategy = class JwtStrategy extends (0, passport_1.PassportStrategy)(pas
             });
             if (!admin)
                 throw new common_1.UnauthorizedException();
+            if (!admin.is_active) {
+                throw new common_1.UnauthorizedException('تم تعطيل هذا الحساب');
+            }
             const { password, ...rest } = admin;
-            return { ...rest, admin_id: rest.admin_id.toString(), role: 'admin' };
+            return {
+                ...rest,
+                admin_id: rest.admin_id.toString(),
+                role: 'admin',
+                admin_role: rest.role,
+            };
         }
         const user = await this.prisma.user.findUnique({
             where: { user_id: BigInt(payload.sub) },
         });
         if (!user)
             throw new common_1.UnauthorizedException();
+        if (!user.is_active) {
+            throw new common_1.UnauthorizedException('تم تعطيل هذا الحساب');
+        }
         const { password, ...rest } = user;
         return { ...rest, user_id: rest.user_id.toString(), role: 'user' };
     }

@@ -15,6 +15,7 @@ const enums_1 = require("../../common/enums");
 class UpdateEmbassyResultDto {
     embassy_status;
     notes;
+    rejection_reason;
 }
 exports.UpdateEmbassyResultDto = UpdateEmbassyResultDto;
 __decorate([
@@ -26,4 +27,9 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], UpdateEmbassyResultDto.prototype, "notes", void 0);
+__decorate([
+    (0, class_validator_1.ValidateIf)((o) => o.embassy_status === enums_1.EmbassyStatus.REJECTED),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], UpdateEmbassyResultDto.prototype, "rejection_reason", void 0);
 //# sourceMappingURL=update-embassy-result.dto.js.map

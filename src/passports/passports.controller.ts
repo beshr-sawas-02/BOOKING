@@ -15,6 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { PassportsService } from './passports.service';
 import { CreatePassportDto } from './dto/create-passport.dto';
 import { VerifyPassportDto } from './dto/verify-passport.dto';
+import { PassportsFilterDto } from './dto/passports-filter.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -27,6 +28,10 @@ import { imageUploadOptions } from '../upload/multer.config';
 export class PassportsController {
   constructor(private passportsService: PassportsService) {}
 
+  // ─────────────────────────────────────────────────────────
+  // User endpoints
+  // ─────────────────────────────────────────────────────────
+
   @Post()
   @UseGuards(RolesGuard)
   @Roles('user')
@@ -34,12 +39,6 @@ export class PassportsController {
     return this.passportsService.create(Number(user.user_id), dto);
   }
 
-  // ─────────────────────────────────────────────────────────
-  // ✨ جديد: تحليل صورة بـ OCR بدون حفظ
-  // POST /passports/ocr-preview
-  // body: form-data { image: File }
-  // returns: { image_url, confidence, needs_review, extracted_data }
-  // ─────────────────────────────────────────────────────────
   @Post('ocr-preview')
   @UseGuards(RolesGuard)
   @Roles('user')
@@ -48,18 +47,41 @@ export class PassportsController {
     return this.passportsService.previewOcr(file);
   }
 
+  // ─────────────────────────────────────────────────────────
+  // Admin endpoints
+  // ─────────────────────────────────────────────────────────
+
+  /**
+   * GET /api/passports?page=1&limit=10&verified=false&confidence_level=low
+   * قائمة كل الجوازات مع pagination + filters
+   */
   @Get()
   @UseGuards(RolesGuard)
   @Roles('admin')
-  findAll() {
-    return this.passportsService.findAll();
+  findAll(@Query() query: PassportsFilterDto) {
+    return this.passportsService.findAll(query);
   }
 
+  /**
+   * GET /api/passports/pending?page=1&limit=10
+   * جوازات تنتظر المراجعة — مرتبة حسب الأولوية (confidence منخفض أولاً)
+   */
   @Get('pending')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  findPending() {
-    return this.passportsService.findPendingVerification();
+  findPending(@Query() query: PassportsFilterDto) {
+    return this.passportsService.findPendingVerification(query);
+  }
+
+  /**
+   * GET /api/passports/stats
+   * إحصائيات سريعة للجوازات (للـ dashboard)
+   */
+  @Get('stats')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  getStats() {
+    return this.passportsService.getStats();
   }
 
   @Get('booking/:bookingId')
@@ -71,6 +93,10 @@ export class PassportsController {
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.passportsService.findOne(id);
   }
+
+  // ─────────────────────────────────────────────────────────
+  // Shared (user + admin)
+  // ─────────────────────────────────────────────────────────
 
   @Post(':id/images')
   @UseInterceptors(FileInterceptor('image', imageUploadOptions))
@@ -91,6 +117,10 @@ export class PassportsController {
     );
   }
 
+  /**
+   * PATCH /api/passports/:id/verify
+   * مراجعة الجواز — قبول مع تعديل البيانات أو رفض مع سبب
+   */
   @Patch(':id/verify')
   @UseGuards(RolesGuard)
   @Roles('admin')

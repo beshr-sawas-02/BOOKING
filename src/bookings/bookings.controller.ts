@@ -12,17 +12,21 @@ import {
 import { BookingsService } from './bookings.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
+import { BookingsFilterDto } from './dto/bookings-filter.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { BookingStatus } from '../common/enums';
 import type { CurrentUserType } from '../common/types/current-user.type';
 
 @Controller('bookings')
 @UseGuards(JwtAuthGuard)
 export class BookingsController {
   constructor(private bookingsService: BookingsService) {}
+
+  // ─────────────────────────────────────────────────────────
+  // User endpoints
+  // ─────────────────────────────────────────────────────────
 
   @Post()
   @UseGuards(RolesGuard)
@@ -34,15 +38,26 @@ export class BookingsController {
   @Get('my')
   @UseGuards(RolesGuard)
   @Roles('user')
-  myBookings(@CurrentUser() user: CurrentUserType) {
-    return this.bookingsService.findMyBookings(Number(user.user_id));
+  myBookings(
+    @CurrentUser() user: CurrentUserType,
+    @Query() query: BookingsFilterDto,
+  ) {
+    return this.bookingsService.findMyBookings(Number(user.user_id), query);
   }
 
+  // ─────────────────────────────────────────────────────────
+  // Admin endpoints
+  // ─────────────────────────────────────────────────────────
+
+  /**
+   * GET /api/bookings?page=1&limit=10&status=PENDING&search=ahmad
+   *   &package_type=HAJJ&from_date=2026-01-01&to_date=2026-12-31
+   */
   @Get()
   @UseGuards(RolesGuard)
   @Roles('admin')
-  findAll(@Query('status') status?: BookingStatus) {
-    return this.bookingsService.findAll({ status });
+  findAll(@Query() query: BookingsFilterDto) {
+    return this.bookingsService.findAll(query);
   }
 
   @Get(':id')

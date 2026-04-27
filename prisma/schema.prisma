@@ -74,6 +74,7 @@ model User {
   email_verified Boolean  @default(false)
   full_name      String
   phone_number   String?
+  is_active      Boolean  @default(true)
   created_at     DateTime @default(now())
   updated_at     DateTime @updatedAt
 
@@ -92,6 +93,7 @@ model Admin {
   email      String    @unique
   password   String
   role       AdminRole @default(ADMIN)
+  is_active  Boolean   @default(true)
   last_login DateTime?
   created_at DateTime  @default(now())
 
@@ -177,7 +179,7 @@ model Booking {
   embassy_results        EmbassyResult[]
   family_proof_documents FamilyProofDocument[]
 
-    review PackageReview?
+  review PackageReview?
 
   @@map("bookings")
 }
@@ -217,6 +219,7 @@ model Passport {
   ai_extracted          Boolean   @default(false)
   extraction_confidence Float?
   verified_by_admin     Boolean   @default(false)
+  rejection_reason      String?
   sent_to_embassy       Boolean   @default(false)
   created_at            DateTime  @default(now())
   updated_at            DateTime  @updatedAt
@@ -242,12 +245,13 @@ model PassportImage {
 }
 
 model EmbassyResult {
-  result_id      BigInt        @id @default(autoincrement())
-  booking_id     BigInt
-  passport_id    BigInt
-  embassy_status EmbassyStatus @default(PENDING)
-  notes          String?
-  uploaded_at    DateTime      @default(now())
+  result_id        BigInt        @id @default(autoincrement())
+  booking_id       BigInt
+  passport_id      BigInt
+  embassy_status   EmbassyStatus @default(PENDING)
+  notes            String?
+  rejection_reason String?
+  uploaded_at      DateTime      @default(now())
 
   booking  Booking  @relation(fields: [booking_id], references: [booking_id])
   passport Passport @relation(fields: [passport_id], references: [passport_id])
@@ -265,6 +269,7 @@ model FamilyProofDocument {
   mother_name         String?
   im_extracted        Boolean            @default(false)
   verification_status VerificationStatus @default(PENDING)
+  rejection_reason    String?
   created_at          DateTime           @default(now())
   updated_at          DateTime           @updatedAt
 
@@ -276,18 +281,18 @@ model FamilyProofDocument {
 }
 
 model PackageReview {
-  review_id   BigInt   @id @default(autoincrement())
-  package_id  BigInt
-  user_id     BigInt
-  booking_id  BigInt   @unique  // كل حجز مرة وحدة فقط
-  rating      Int      // 1-5
-  comment     String?
-  created_at  DateTime @default(now())
+  review_id  BigInt   @id @default(autoincrement())
+  package_id BigInt
+  user_id    BigInt
+  booking_id BigInt   @unique
+  rating     Int
+  comment    String?
+  created_at DateTime @default(now())
 
   package Package @relation(fields: [package_id], references: [package_id])
   user    User    @relation(fields: [user_id], references: [user_id])
   booking Booking @relation(fields: [booking_id], references: [booking_id])
 
-  @@unique([user_id, package_id])  // مستخدم واحد يقيّم الباقة مرة وحدة
+  @@unique([user_id, package_id])
   @@map("package_reviews")
 }
