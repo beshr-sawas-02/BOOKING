@@ -30,7 +30,6 @@ export class BookingsService {
   // إنشاء حجز جديد (للمستخدم)
   // ─────────────────────────────────────────────────────────
   async create(userId: number, dto: CreateBookingDto) {
-    // 1. تحقق من الباقة
     const pkg = await this.prisma.package.findUnique({
       where: { package_id: BigInt(dto.package_id) },
     });
@@ -43,7 +42,6 @@ export class BookingsService {
       );
     }
 
-    // 2. تحقق من قواعد المحارم (للحج فقط)
     const warnings: string[] = [];
     if (pkg.package_type === 'HAJJ') {
       const companions = dto.participants
@@ -85,14 +83,11 @@ export class BookingsService {
       warnings.push(...(validationResult.warnings || []));
     }
 
-    // 3. تأكد من وجود PRIMARY واحد على الأقل
     const hasPrimary = dto.participants.some((p) => p.is_primary);
     if (!hasPrimary) dto.participants[0].is_primary = true;
 
-    // 4. احسب السعر الإجمالي
     const totalPrice = Number(pkg.price_per_person) * dto.participants.length;
 
-    // 5. أنشئ الحجز
     const booking = await this.prisma.booking.create({
       data: {
         user_id: BigInt(userId),
@@ -122,14 +117,11 @@ export class BookingsService {
       },
     });
 
-    return {
-      ...booking,
-      warnings,
-    };
+    return { ...booking, warnings };
   }
 
   // ─────────────────────────────────────────────────────────
-  // قائمة الحجوزات للأدمن — مع pagination + filters + search
+  // قائمة الحجوزات للأدمن
   // ─────────────────────────────────────────────────────────
   async findAll(filters: BookingsFilterDto) {
     const page = filters.page ?? 1;
@@ -169,6 +161,25 @@ export class BookingsService {
               relation_type: true,
               is_primary: true,
               passport_id: true,
+              passport: {
+                select: {
+                  passport_id: true,
+                  verified_by_admin: true,
+                  rejection_reason: true,
+                },
+              },
+            },
+          },
+          family_proof_documents: {
+            select: {
+              document_id: true,
+              verification_status: true,
+            },
+          },
+          embassy_results: {
+            select: {
+              result_id: true,
+              embassy_status: true,
             },
           },
           _count: {
@@ -186,9 +197,6 @@ export class BookingsService {
     return buildPaginatedResponse(bookings, total, page, limit);
   }
 
-  // ─────────────────────────────────────────────────────────
-  // قائمة حجوزات المستخدم نفسه
-  // ─────────────────────────────────────────────────────────
   async findMyBookings(userId: number, filters: BookingsFilterDto) {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 10;
@@ -222,7 +230,7 @@ export class BookingsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // تفاصيل حجز كامل
+  // ✨ تفاصيل حجز كاملة + workflow status
   // ─────────────────────────────────────────────────────────
   async findOne(id: number) {
     const booking = await this.prisma.booking.findUnique({
@@ -245,6 +253,7 @@ export class BookingsService {
             passport: { include: { passport_images: true } },
             family_proof: true,
           },
+          orderBy: { is_primary: 'desc' },
         },
         embassy_results: {
           include: {
@@ -252,21 +261,211 @@ export class BookingsService {
               select: {
                 passport_id: true,
                 full_name_en: true,
+                full_name_ar: true,
                 passport_number: true,
               },
             },
           },
         },
-        family_proof_documents: true,
+        family_proof_documents: {
+          include: {
+            uploader: {
+              select: { user_id: true, full_name: true, email: true },
+            },
+          },
+        },
         review: true,
       },
     });
     if (!booking) throw new NotFoundException('Booking not found');
-    return booking;
+
+    // ✨ احسب الـ workflow status
+    const workflow = this.computeWorkflowStatus(booking);
+
+    return { ...booking, workflow };
   }
 
   // ─────────────────────────────────────────────────────────
-  // تحديث حالة الحجز (للأدمن)
+  // ✨ حساب حالة سير العمل (Workflow)
+  // ─────────────────────────────────────────────────────────
+  private computeWorkflowStatus(booking: any) {
+    const participants = booking.booking_participants || [];
+    const docs = booking.family_proof_documents || [];
+    const embassyResults = booking.embassy_results || [];
+
+    // 1. حالة الجوازات
+    const passportsTotal = participants.length;
+    const passportsUploaded = participants.filter((p: any) => p.passport).length;
+    const passportsVerified = participants.filter(
+      (p: any) => p.passport?.verified_by_admin === true,
+    ).length;
+    const passportsRejected = participants.filter(
+      (p: any) => p.passport?.rejection_reason !== null && p.passport?.rejection_reason !== undefined,
+    ).length;
+    const passportsPending = participants.filter(
+      (p: any) =>
+        p.passport &&
+        !p.passport.verified_by_admin &&
+        !p.passport.rejection_reason,
+    ).length;
+
+    // 2. حالة الوثائق
+    const docsTotal = docs.length;
+    const docsApproved = docs.filter(
+      (d: any) => d.verification_status === 'APPROVED',
+    ).length;
+    const docsRejected = docs.filter(
+      (d: any) => d.verification_status === 'REJECTED',
+    ).length;
+    const docsPending = docs.filter(
+      (d: any) => d.verification_status === 'PENDING',
+    ).length;
+
+    // 3. حالة السفارة
+    const embassyTotal = embassyResults.length;
+    const embassyApproved = embassyResults.filter(
+      (e: any) => e.embassy_status === 'APPROVED',
+    ).length;
+    const embassyRejected = embassyResults.filter(
+      (e: any) => e.embassy_status === 'REJECTED',
+    ).length;
+    const embassyPending = embassyResults.filter(
+      (e: any) => e.embassy_status === 'PENDING',
+    ).length;
+
+    // 4. الشروط للأزرار
+    const allPassportsVerified =
+      passportsTotal > 0 &&
+      passportsUploaded === passportsTotal &&
+      passportsVerified === passportsTotal;
+
+    const allDocsApproved =
+      docsTotal === 0 || // قد لا تكون مطلوبة
+      (docsTotal > 0 && docsApproved === docsTotal);
+
+    const canConfirmBooking =
+      booking.booking_status === 'PENDING' &&
+      allPassportsVerified &&
+      allDocsApproved;
+
+    const canSendToEmbassy =
+      booking.booking_status === 'CONFIRMED' &&
+      passportsVerified > 0 &&
+      embassyTotal === 0; // لم يُرسل بعد
+
+    const canCompleteBooking = booking.booking_status === 'CONFIRMED';
+
+    // 5. اقتراحات للأدمن
+    const suggestions: string[] = [];
+
+    // اقتراح: لو كل الجوازات رُفضت → اقترح رفض الحجز
+    if (passportsTotal > 0 && passportsRejected === passportsTotal) {
+      suggestions.push(
+        'كل الجوازات مرفوضة، يُنصح برفض الحجز أو طلب جوازات جديدة من المستخدم',
+      );
+    }
+
+    // اقتراح: لو كل وثائق العائلة مرفوضة
+    if (docsTotal > 0 && docsRejected === docsTotal) {
+      suggestions.push(
+        'كل الوثائق مرفوضة، يُنصح برفض الحجز أو طلب وثائق جديدة',
+      );
+    }
+
+    // اقتراح: لو السفارة رفضت كل الجوازات (حالة هجين)
+    if (embassyTotal > 0 && embassyRejected === embassyTotal) {
+      suggestions.push(
+        'السفارة رفضت جميع الجوازات، يُنصح برفض الحجز كاملاً',
+      );
+    }
+
+    return {
+      // عدّادات الجوازات
+      passports: {
+        total: passportsTotal,
+        uploaded: passportsUploaded,
+        verified: passportsVerified,
+        rejected: passportsRejected,
+        pending: passportsPending,
+      },
+      // عدّادات الوثائق
+      documents: {
+        total: docsTotal,
+        approved: docsApproved,
+        rejected: docsRejected,
+        pending: docsPending,
+      },
+      // عدّادات السفارة
+      embassy: {
+        total: embassyTotal,
+        approved: embassyApproved,
+        rejected: embassyRejected,
+        pending: embassyPending,
+      },
+      // أزرار ذكية
+      canConfirmBooking,
+      canSendToEmbassy,
+      canCompleteBooking,
+      // اقتراحات
+      suggestions,
+      // أسباب عدم القدرة على القبول
+      blockReasons: this.getBlockReasons(
+        booking.booking_status,
+        passportsTotal,
+        passportsUploaded,
+        passportsVerified,
+        passportsPending,
+        passportsRejected,
+        docsTotal,
+        docsApproved,
+        docsPending,
+        docsRejected,
+      ),
+    };
+  }
+
+  private getBlockReasons(
+    status: string,
+    pTotal: number,
+    pUploaded: number,
+    pVerified: number,
+    pPending: number,
+    pRejected: number,
+    dTotal: number,
+    dApproved: number,
+    dPending: number,
+    dRejected: number,
+  ): string[] {
+    if (status !== 'PENDING') return [];
+
+    const reasons: string[] = [];
+
+    if (pTotal === 0) {
+      reasons.push('لا يوجد مشاركون في الحجز');
+    }
+    if (pUploaded < pTotal) {
+      reasons.push(
+        `${pTotal - pUploaded} مشارك لم يرفع جوازه بعد`,
+      );
+    }
+    if (pPending > 0) {
+      reasons.push(`${pPending} جواز بانتظار المراجعة`);
+    }
+    if (pRejected > 0) {
+      reasons.push(`${pRejected} جواز مرفوض - يجب طلب صور جديدة`);
+    }
+    if (dPending > 0) {
+      reasons.push(`${dPending} وثيقة عائلية بانتظار المراجعة`);
+    }
+    if (dRejected > 0) {
+      reasons.push(`${dRejected} وثيقة عائلية مرفوضة`);
+    }
+
+    return reasons;
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // ✨ تحديث حالة الحجز (مع التحقق من اكتمال المراجعة)
   // ─────────────────────────────────────────────────────────
   async updateStatus(id: number, dto: UpdateBookingStatusDto) {
     const booking = await this.findOne(id);
@@ -286,13 +485,25 @@ export class BookingsService {
       [BookingStatus.COMPLETED]: [],
     };
 
-    if (!validTransitions[booking.booking_status].includes(dto.booking_status)) {
+    if (
+      !validTransitions[booking.booking_status].includes(dto.booking_status)
+    ) {
       throw new BadRequestException(
         `لا يمكن التحول من ${booking.booking_status} إلى ${dto.booking_status}`,
       );
     }
 
-    // إذا الحالة REJECTED → سبب الرفض مطلوب
+    // ✨ القاعدة الجديدة: لا يمكن قبول الحجز إلا بعد اكتمال المراجعة
+    if (dto.booking_status === BookingStatus.CONFIRMED) {
+      const workflow = (booking as any).workflow;
+      if (!workflow?.canConfirmBooking) {
+        throw new BadRequestException({
+          message: 'لا يمكن قبول الحجز قبل اكتمال مراجعة الجوازات والوثائق',
+          reasons: workflow?.blockReasons || [],
+        });
+      }
+    }
+
     if (dto.booking_status === BookingStatus.REJECTED) {
       const reason = dto.rejection_reason || dto.reason;
       if (!reason || !reason.trim()) {
@@ -310,9 +521,6 @@ export class BookingsService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────
-  // إلغاء الحجز (للمستخدم)
-  // ─────────────────────────────────────────────────────────
   async cancel(id: number, userId: number) {
     const booking = await this.findOne(id);
     if (booking.user_id.toString() !== userId.toString()) {
@@ -330,9 +538,6 @@ export class BookingsService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────
-  // تعديل الحجز من المستخدم — فقط إذا PENDING
-  // ─────────────────────────────────────────────────────────
   async updateByUser(
     bookingId: number,
     userId: number,
@@ -369,14 +574,6 @@ export class BookingsService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────
-  // Private helpers
-  // ─────────────────────────────────────────────────────────
-
-  /**
-   * بناء where clause للـ findAll
-   * يدعم: status, package_type, search (في user/package), date range
-   */
   private buildWhereClause(
     filters: BookingsFilterDto,
     search?: string,
@@ -391,7 +588,6 @@ export class BookingsService {
       where.package = { package_type: filters.package_type as any };
     }
 
-    // فلتر التواريخ — created_at بين from_date و to_date
     if (filters.from_date || filters.to_date) {
       where.created_at = {
         ...(filters.from_date && { gte: new Date(filters.from_date) }),
@@ -399,16 +595,11 @@ export class BookingsService {
       };
     }
 
-    // البحث في اسم المستخدم/email أو اسم الباقة
     if (search) {
       where.OR = [
         { user: { full_name: { contains: search, mode: 'insensitive' } } },
         { user: { email: { contains: search, mode: 'insensitive' } } },
-        {
-          user: {
-            phone_number: { contains: search, mode: 'insensitive' },
-          },
-        },
+        { user: { phone_number: { contains: search, mode: 'insensitive' } } },
         {
           package: {
             package_title: { contains: search, mode: 'insensitive' },

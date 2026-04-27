@@ -89,10 +89,7 @@ let BookingsService = class BookingsService {
                 package: true,
             },
         });
-        return {
-            ...booking,
-            warnings,
-        };
+        return { ...booking, warnings };
     }
     async findAll(filters) {
         const page = filters.page ?? 1;
@@ -130,6 +127,25 @@ let BookingsService = class BookingsService {
                             relation_type: true,
                             is_primary: true,
                             passport_id: true,
+                            passport: {
+                                select: {
+                                    passport_id: true,
+                                    verified_by_admin: true,
+                                    rejection_reason: true,
+                                },
+                            },
+                        },
+                    },
+                    family_proof_documents: {
+                        select: {
+                            document_id: true,
+                            verification_status: true,
+                        },
+                    },
+                    embassy_results: {
+                        select: {
+                            result_id: true,
+                            embassy_status: true,
                         },
                     },
                     _count: {
@@ -193,6 +209,7 @@ let BookingsService = class BookingsService {
                         passport: { include: { passport_images: true } },
                         family_proof: true,
                     },
+                    orderBy: { is_primary: 'desc' },
                 },
                 embassy_results: {
                     include: {
@@ -200,18 +217,118 @@ let BookingsService = class BookingsService {
                             select: {
                                 passport_id: true,
                                 full_name_en: true,
+                                full_name_ar: true,
                                 passport_number: true,
                             },
                         },
                     },
                 },
-                family_proof_documents: true,
+                family_proof_documents: {
+                    include: {
+                        uploader: {
+                            select: { user_id: true, full_name: true, email: true },
+                        },
+                    },
+                },
                 review: true,
             },
         });
         if (!booking)
             throw new common_1.NotFoundException('Booking not found');
-        return booking;
+        const workflow = this.computeWorkflowStatus(booking);
+        return { ...booking, workflow };
+    }
+    computeWorkflowStatus(booking) {
+        const participants = booking.booking_participants || [];
+        const docs = booking.family_proof_documents || [];
+        const embassyResults = booking.embassy_results || [];
+        const passportsTotal = participants.length;
+        const passportsUploaded = participants.filter((p) => p.passport).length;
+        const passportsVerified = participants.filter((p) => p.passport?.verified_by_admin === true).length;
+        const passportsRejected = participants.filter((p) => p.passport?.rejection_reason !== null && p.passport?.rejection_reason !== undefined).length;
+        const passportsPending = participants.filter((p) => p.passport &&
+            !p.passport.verified_by_admin &&
+            !p.passport.rejection_reason).length;
+        const docsTotal = docs.length;
+        const docsApproved = docs.filter((d) => d.verification_status === 'APPROVED').length;
+        const docsRejected = docs.filter((d) => d.verification_status === 'REJECTED').length;
+        const docsPending = docs.filter((d) => d.verification_status === 'PENDING').length;
+        const embassyTotal = embassyResults.length;
+        const embassyApproved = embassyResults.filter((e) => e.embassy_status === 'APPROVED').length;
+        const embassyRejected = embassyResults.filter((e) => e.embassy_status === 'REJECTED').length;
+        const embassyPending = embassyResults.filter((e) => e.embassy_status === 'PENDING').length;
+        const allPassportsVerified = passportsTotal > 0 &&
+            passportsUploaded === passportsTotal &&
+            passportsVerified === passportsTotal;
+        const allDocsApproved = docsTotal === 0 ||
+            (docsTotal > 0 && docsApproved === docsTotal);
+        const canConfirmBooking = booking.booking_status === 'PENDING' &&
+            allPassportsVerified &&
+            allDocsApproved;
+        const canSendToEmbassy = booking.booking_status === 'CONFIRMED' &&
+            passportsVerified > 0 &&
+            embassyTotal === 0;
+        const canCompleteBooking = booking.booking_status === 'CONFIRMED';
+        const suggestions = [];
+        if (passportsTotal > 0 && passportsRejected === passportsTotal) {
+            suggestions.push('كل الجوازات مرفوضة، يُنصح برفض الحجز أو طلب جوازات جديدة من المستخدم');
+        }
+        if (docsTotal > 0 && docsRejected === docsTotal) {
+            suggestions.push('كل الوثائق مرفوضة، يُنصح برفض الحجز أو طلب وثائق جديدة');
+        }
+        if (embassyTotal > 0 && embassyRejected === embassyTotal) {
+            suggestions.push('السفارة رفضت جميع الجوازات، يُنصح برفض الحجز كاملاً');
+        }
+        return {
+            passports: {
+                total: passportsTotal,
+                uploaded: passportsUploaded,
+                verified: passportsVerified,
+                rejected: passportsRejected,
+                pending: passportsPending,
+            },
+            documents: {
+                total: docsTotal,
+                approved: docsApproved,
+                rejected: docsRejected,
+                pending: docsPending,
+            },
+            embassy: {
+                total: embassyTotal,
+                approved: embassyApproved,
+                rejected: embassyRejected,
+                pending: embassyPending,
+            },
+            canConfirmBooking,
+            canSendToEmbassy,
+            canCompleteBooking,
+            suggestions,
+            blockReasons: this.getBlockReasons(booking.booking_status, passportsTotal, passportsUploaded, passportsVerified, passportsPending, passportsRejected, docsTotal, docsApproved, docsPending, docsRejected),
+        };
+    }
+    getBlockReasons(status, pTotal, pUploaded, pVerified, pPending, pRejected, dTotal, dApproved, dPending, dRejected) {
+        if (status !== 'PENDING')
+            return [];
+        const reasons = [];
+        if (pTotal === 0) {
+            reasons.push('لا يوجد مشاركون في الحجز');
+        }
+        if (pUploaded < pTotal) {
+            reasons.push(`${pTotal - pUploaded} مشارك لم يرفع جوازه بعد`);
+        }
+        if (pPending > 0) {
+            reasons.push(`${pPending} جواز بانتظار المراجعة`);
+        }
+        if (pRejected > 0) {
+            reasons.push(`${pRejected} جواز مرفوض - يجب طلب صور جديدة`);
+        }
+        if (dPending > 0) {
+            reasons.push(`${dPending} وثيقة عائلية بانتظار المراجعة`);
+        }
+        if (dRejected > 0) {
+            reasons.push(`${dRejected} وثيقة عائلية مرفوضة`);
+        }
+        return reasons;
     }
     async updateStatus(id, dto) {
         const booking = await this.findOne(id);
@@ -231,6 +348,15 @@ let BookingsService = class BookingsService {
         };
         if (!validTransitions[booking.booking_status].includes(dto.booking_status)) {
             throw new common_1.BadRequestException(`لا يمكن التحول من ${booking.booking_status} إلى ${dto.booking_status}`);
+        }
+        if (dto.booking_status === enums_1.BookingStatus.CONFIRMED) {
+            const workflow = booking.workflow;
+            if (!workflow?.canConfirmBooking) {
+                throw new common_1.BadRequestException({
+                    message: 'لا يمكن قبول الحجز قبل اكتمال مراجعة الجوازات والوثائق',
+                    reasons: workflow?.blockReasons || [],
+                });
+            }
         }
         if (dto.booking_status === enums_1.BookingStatus.REJECTED) {
             const reason = dto.rejection_reason || dto.reason;
@@ -304,11 +430,7 @@ let BookingsService = class BookingsService {
             where.OR = [
                 { user: { full_name: { contains: search, mode: 'insensitive' } } },
                 { user: { email: { contains: search, mode: 'insensitive' } } },
-                {
-                    user: {
-                        phone_number: { contains: search, mode: 'insensitive' },
-                    },
-                },
+                { user: { phone_number: { contains: search, mode: 'insensitive' } } },
                 {
                     package: {
                         package_title: { contains: search, mode: 'insensitive' },
