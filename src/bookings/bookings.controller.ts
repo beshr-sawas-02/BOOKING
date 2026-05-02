@@ -8,7 +8,9 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { BookingsService } from './bookings.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
@@ -63,6 +65,39 @@ export class BookingsController {
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.bookingsService.findOne(id);
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // ✨ تحميل PDF لجدول الرحلة
+  // GET /api/bookings/:id/itinerary-pdf
+  // متاح للمستخدم (صاحب الحجز) والأدمن
+  // ─────────────────────────────────────────────────────────
+  @Get(':id/itinerary-pdf')
+  @UseGuards(RolesGuard)
+  @Roles('user', 'admin')
+  async downloadItinerary(
+    @Param('id', ParseIntPipe) id: number,
+    @CurrentUser() user: any, // ← any لأنه يستقبل user أو admin
+    @Res() res: Response,
+  ) {
+    const isAdmin = user.role === 'admin';
+    const userId = isAdmin
+      ? Number(user.admin_id)
+      : Number(user.user_id);
+
+    const pdfBuffer = await this.bookingsService.generateItineraryPdf(
+      id,
+      userId,
+      isAdmin,
+    );
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="itinerary-${id}.pdf"`,
+      'Content-Length': pdfBuffer.length,
+    });
+
+    res.end(pdfBuffer);
   }
 
   @Patch(':id/status')

@@ -39,6 +39,19 @@ let BookingsController = class BookingsController {
     findOne(id) {
         return this.bookingsService.findOne(id);
     }
+    async downloadItinerary(id, user, res) {
+        const isAdmin = user.role === 'admin';
+        const userId = isAdmin
+            ? Number(user.admin_id)
+            : Number(user.user_id);
+        const pdfBuffer = await this.bookingsService.generateItineraryPdf(id, userId, isAdmin);
+        res.set({
+            'Content-Type': 'application/pdf',
+            'Content-Disposition': `attachment; filename="itinerary-${id}.pdf"`,
+            'Content-Length': pdfBuffer.length,
+        });
+        res.end(pdfBuffer);
+    }
     updateStatus(id, dto) {
         return this.bookingsService.updateStatus(id, dto);
     }
@@ -86,6 +99,17 @@ __decorate([
     __metadata("design:paramtypes", [Number]),
     __metadata("design:returntype", void 0)
 ], BookingsController.prototype, "findOne", null);
+__decorate([
+    (0, common_1.Get)(':id/itinerary-pdf'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('user', 'admin'),
+    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
+    __param(1, (0, current_user_decorator_1.CurrentUser)()),
+    __param(2, (0, common_1.Res)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Object, Object]),
+    __metadata("design:returntype", Promise)
+], BookingsController.prototype, "downloadItinerary", null);
 __decorate([
     (0, common_1.Patch)(':id/status'),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),

@@ -13,6 +13,7 @@ import { EmbassyModule } from './embassy/embassy.module';
 import { ReviewsModule } from './reviews/reviews.module';
 import { UploadModule } from './upload/upload.module';
 import { AiModule } from './ai/ai.module';
+import { PdfModule } from './pdf/pdf.module'; // ✨ جديد
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 @Module({
@@ -30,6 +31,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     ReviewsModule,
     UploadModule,
     AiModule,
+    PdfModule, // ✨ جديد
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

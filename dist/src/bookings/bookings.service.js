@@ -12,13 +12,17 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.BookingsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
+const pdf_service_1 = require("../pdf/pdf.service");
 const enums_1 = require("../common/enums");
 const pagination_dto_1 = require("../common/dto/pagination.dto");
 const mahram_validator_1 = require("./validators/mahram.validator");
+const itinerary_template_1 = require("./templates/itinerary.template");
 let BookingsService = class BookingsService {
     prisma;
-    constructor(prisma) {
+    pdfService;
+    constructor(prisma, pdfService) {
         this.prisma = prisma;
+        this.pdfService = pdfService;
     }
     mahramValidator = new mahram_validator_1.MahramValidator();
     async create(userId, dto) {
@@ -238,6 +242,69 @@ let BookingsService = class BookingsService {
         const workflow = this.computeWorkflowStatus(booking);
         return { ...booking, workflow };
     }
+    async generateItineraryPdf(bookingId, userId, isAdmin) {
+        const booking = await this.prisma.booking.findUnique({
+            where: { booking_id: BigInt(bookingId) },
+            include: {
+                user: true,
+                package: {
+                    include: {
+                        package_hotels: { include: { hotel: true } },
+                    },
+                },
+                booking_participants: true,
+            },
+        });
+        if (!booking)
+            throw new common_1.NotFoundException('Booking not found');
+        if (!isAdmin && booking.user_id.toString() !== userId.toString()) {
+            throw new common_1.ForbiddenException('Access denied');
+        }
+        const html = (0, itinerary_template_1.generateItineraryHtml)({
+            booking_id: booking.booking_id.toString(),
+            user_name: booking.user.full_name,
+            package_title: booking.package.package_title,
+            package_type: booking.package.package_type,
+            duration_days: booking.package.duration_days,
+            total_price: Number(booking.total_price),
+            participants: booking.booking_participants.map((p) => ({
+                name: p.full_name,
+                relation: this.translateRelation(p.relation_type),
+            })),
+            hotels: booking.package.package_hotels.map((ph) => ({
+                name: ph.hotel.hotel_name,
+                location: ph.hotel.location,
+                stars: ph.hotel.stars,
+            })),
+            supervisor_name: booking.package.supervisor_name ?? undefined,
+            supervisor_phone: booking.package.supervisor_phone ?? undefined,
+            days: [],
+            generated_at: new Date(),
+        });
+        return await this.pdfService.generateFromHtml(html);
+    }
+    translateRelation(rel) {
+        const map = {
+            PRIMARY: 'صاحب الطلب',
+            SPOUSE: 'زوج/زوجة',
+            SON: 'ابن',
+            DAUGHTER: 'بنت',
+            MOTHER: 'أم',
+            FATHER: 'أب',
+            BROTHER: 'أخ',
+            SISTER: 'أخت',
+            GRANDSON: 'حفيد',
+            GRANDDAUGHTER: 'حفيدة',
+            SON_WIFE: 'زوجة الابن',
+            DAUGHTER_HUSBAND: 'زوج البنت',
+            NEPHEW: 'ابن الأخ/الأخت',
+            NIECE: 'بنت الأخ/الأخت',
+            BROTHER_WIFE: 'زوجة الأخ',
+            SISTER_HUSBAND: 'زوج الأخت',
+            OTHER: 'أخرى',
+        };
+        return map[rel] ?? rel;
+    }
     computeWorkflowStatus(booking) {
         const participants = booking.booking_participants || [];
         const docs = booking.family_proof_documents || [];
@@ -444,6 +511,7 @@ let BookingsService = class BookingsService {
 exports.BookingsService = BookingsService;
 exports.BookingsService = BookingsService = __decorate([
     (0, common_1.Injectable)(),
-    __metadata("design:paramtypes", [prisma_service_1.PrismaService])
+    __metadata("design:paramtypes", [prisma_service_1.PrismaService,
+        pdf_service_1.PdfService])
 ], BookingsService);
 //# sourceMappingURL=bookings.service.js.map

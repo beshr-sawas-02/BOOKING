@@ -120,6 +120,9 @@ export declare class PassportsController {
                     duration_days: number;
                     price_per_person: import("@prisma/client/runtime/library").Decimal;
                     max_participants: number;
+                    supervisor_name: string | null;
+                    supervisor_phone: string | null;
+                    supervisor_email: string | null;
                 };
             } & {
                 created_at: Date;
@@ -250,6 +253,9 @@ export declare class PassportsController {
                     duration_days: number;
                     price_per_person: import("@prisma/client/runtime/library").Decimal;
                     max_participants: number;
+                    supervisor_name: string | null;
+                    supervisor_phone: string | null;
+                    supervisor_email: string | null;
                 };
             } & {
                 created_at: Date;
@@ -339,6 +345,9 @@ export declare class PassportsController {
                         duration_days: number;
                         price_per_person: import("@prisma/client/runtime/library").Decimal;
                         max_participants: number;
+                        supervisor_name: string | null;
+                        supervisor_phone: string | null;
+                        supervisor_email: string | null;
                     };
                 } & {
                     created_at: Date;

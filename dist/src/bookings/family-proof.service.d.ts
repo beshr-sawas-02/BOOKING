@@ -16,13 +16,13 @@ export declare class FamilyProofService {
         verification_status: import(".prisma/client").$Enums.VerificationStatus;
         booking_id: bigint;
         rejection_reason: string | null;
+        document_id: bigint;
+        uploaded_by: bigint;
+        document_url: string;
         document_type: string;
         father_name: string | null;
         mother_name: string | null;
-        document_id: bigint;
-        document_url: string;
         im_extracted: boolean;
-        uploaded_by: bigint;
     }>;
     findAll(filters: FamilyProofFilterDto): Promise<import("../common/dto/pagination.dto").PaginatedResponse<{
         booking: {
@@ -49,13 +49,13 @@ export declare class FamilyProofService {
         verification_status: import(".prisma/client").$Enums.VerificationStatus;
         booking_id: bigint;
         rejection_reason: string | null;
+        document_id: bigint;
+        uploaded_by: bigint;
+        document_url: string;
         document_type: string;
         father_name: string | null;
         mother_name: string | null;
-        document_id: bigint;
-        document_url: string;
         im_extracted: boolean;
-        uploaded_by: bigint;
     }>>;
     findPending(filters: FamilyProofFilterDto): Promise<import("../common/dto/pagination.dto").PaginatedResponse<{
         booking: {
@@ -70,6 +70,9 @@ export declare class FamilyProofService {
                 duration_days: number;
                 price_per_person: Prisma.Decimal;
                 max_participants: number;
+                supervisor_name: string | null;
+                supervisor_phone: string | null;
+                supervisor_email: string | null;
             };
             booking_participants: {
                 full_name: string;
@@ -101,13 +104,13 @@ export declare class FamilyProofService {
         verification_status: import(".prisma/client").$Enums.VerificationStatus;
         booking_id: bigint;
         rejection_reason: string | null;
+        document_id: bigint;
+        uploaded_by: bigint;
+        document_url: string;
         document_type: string;
         father_name: string | null;
         mother_name: string | null;
-        document_id: bigint;
-        document_url: string;
         im_extracted: boolean;
-        uploaded_by: bigint;
     }>>;
     getStats(): Promise<{
         total: number;
@@ -132,13 +135,13 @@ export declare class FamilyProofService {
         verification_status: import(".prisma/client").$Enums.VerificationStatus;
         booking_id: bigint;
         rejection_reason: string | null;
+        document_id: bigint;
+        uploaded_by: bigint;
+        document_url: string;
         document_type: string;
         father_name: string | null;
         mother_name: string | null;
-        document_id: bigint;
-        document_url: string;
         im_extracted: boolean;
-        uploaded_by: bigint;
     })[]>;
     findOne(id: number): Promise<{
         booking: {
@@ -153,6 +156,9 @@ export declare class FamilyProofService {
                 duration_days: number;
                 price_per_person: Prisma.Decimal;
                 max_participants: number;
+                supervisor_name: string | null;
+                supervisor_phone: string | null;
+                supervisor_email: string | null;
             };
             booking_participants: {
                 full_name: string;
@@ -202,13 +208,13 @@ export declare class FamilyProofService {
         verification_status: import(".prisma/client").$Enums.VerificationStatus;
         booking_id: bigint;
         rejection_reason: string | null;
+        document_id: bigint;
+        uploaded_by: bigint;
+        document_url: string;
         document_type: string;
         father_name: string | null;
         mother_name: string | null;
-        document_id: bigint;
-        document_url: string;
         im_extracted: boolean;
-        uploaded_by: bigint;
     }>;
     verify(documentId: number, dto: VerifyFamilyProofDto): Promise<{
         booking: {
@@ -227,13 +233,13 @@ export declare class FamilyProofService {
         verification_status: import(".prisma/client").$Enums.VerificationStatus;
         booking_id: bigint;
         rejection_reason: string | null;
+        document_id: bigint;
+        uploaded_by: bigint;
+        document_url: string;
         document_type: string;
         father_name: string | null;
         mother_name: string | null;
-        document_id: bigint;
-        document_url: string;
         im_extracted: boolean;
-        uploaded_by: bigint;
     }>;
     linkToParticipant(documentId: number, participantId: number): Promise<{
         family_proof: {
@@ -242,13 +248,13 @@ export declare class FamilyProofService {
             verification_status: import(".prisma/client").$Enums.VerificationStatus;
             booking_id: bigint;
             rejection_reason: string | null;
+            document_id: bigint;
+            uploaded_by: bigint;
+            document_url: string;
             document_type: string;
             father_name: string | null;
             mother_name: string | null;
-            document_id: bigint;
-            document_url: string;
             im_extracted: boolean;
-            uploaded_by: bigint;
         } | null;
     } & {
         full_name: string;

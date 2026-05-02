@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { PdfService } from '../pdf/pdf.service'; // ✨ جديد
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import { BookingsFilterDto } from './dto/bookings-filter.dto';
@@ -19,10 +20,14 @@ import {
   calcAge,
   Gender,
 } from './validators/mahram.validator';
+import { generateItineraryHtml } from './templates/itinerary.template'; // ✨ جديد
 
 @Injectable()
 export class BookingsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private pdfService: PdfService, // ✨ جديد
+  ) {}
 
   private mahramValidator = new MahramValidator();
 
@@ -286,6 +291,85 @@ export class BookingsService {
   }
 
   // ─────────────────────────────────────────────────────────
+  // ✨ جديد: توليد PDF لجدول الرحلة
+  // ─────────────────────────────────────────────────────────
+  async generateItineraryPdf(
+    bookingId: number,
+    userId: number,
+    isAdmin: boolean,
+  ): Promise<Buffer> {
+    const booking = await this.prisma.booking.findUnique({
+      where: { booking_id: BigInt(bookingId) },
+      include: {
+        user: true,
+        package: {
+          include: {
+            package_hotels: { include: { hotel: true } },
+          },
+        },
+        booking_participants: true,
+      },
+    });
+
+    if (!booking) throw new NotFoundException('Booking not found');
+
+    // التحقق من الصلاحية: يجب أن يكون المالك أو أدمن
+    if (!isAdmin && booking.user_id.toString() !== userId.toString()) {
+      throw new ForbiddenException('Access denied');
+    }
+
+    const html = generateItineraryHtml({
+      booking_id: booking.booking_id.toString(),
+      user_name: booking.user.full_name,
+      package_title: booking.package.package_title,
+      package_type: booking.package.package_type as 'HAJJ' | 'UMRAH',
+      duration_days: booking.package.duration_days,
+      total_price: Number(booking.total_price),
+      participants: booking.booking_participants.map((p) => ({
+        name: p.full_name,
+        relation: this.translateRelation(p.relation_type),
+      })),
+      hotels: booking.package.package_hotels.map((ph) => ({
+        name: ph.hotel.hotel_name,
+        location: ph.hotel.location,
+        stars: ph.hotel.stars,
+      })),
+      supervisor_name: booking.package.supervisor_name ?? undefined,
+      supervisor_phone: booking.package.supervisor_phone ?? undefined,
+      days: [],
+      generated_at: new Date(),
+    });
+
+    return await this.pdfService.generateFromHtml(html);
+  }
+
+  /**
+   * تحويل enum الـ relation إلى عربي
+   */
+  private translateRelation(rel: string): string {
+    const map: Record<string, string> = {
+      PRIMARY: 'صاحب الطلب',
+      SPOUSE: 'زوج/زوجة',
+      SON: 'ابن',
+      DAUGHTER: 'بنت',
+      MOTHER: 'أم',
+      FATHER: 'أب',
+      BROTHER: 'أخ',
+      SISTER: 'أخت',
+      GRANDSON: 'حفيد',
+      GRANDDAUGHTER: 'حفيدة',
+      SON_WIFE: 'زوجة الابن',
+      DAUGHTER_HUSBAND: 'زوج البنت',
+      NEPHEW: 'ابن الأخ/الأخت',
+      NIECE: 'بنت الأخ/الأخت',
+      BROTHER_WIFE: 'زوجة الأخ',
+      SISTER_HUSBAND: 'زوج الأخت',
+      OTHER: 'أخرى',
+    };
+    return map[rel] ?? rel;
+  }
+
+  // ─────────────────────────────────────────────────────────
   // ✨ حساب حالة سير العمل (Workflow)
   // ─────────────────────────────────────────────────────────
   private computeWorkflowStatus(booking: any) {
@@ -340,7 +424,7 @@ export class BookingsService {
       passportsVerified === passportsTotal;
 
     const allDocsApproved =
-      docsTotal === 0 || // قد لا تكون مطلوبة
+      docsTotal === 0 ||
       (docsTotal > 0 && docsApproved === docsTotal);
 
     const canConfirmBooking =
@@ -351,28 +435,24 @@ export class BookingsService {
     const canSendToEmbassy =
       booking.booking_status === 'CONFIRMED' &&
       passportsVerified > 0 &&
-      embassyTotal === 0; // لم يُرسل بعد
+      embassyTotal === 0;
 
     const canCompleteBooking = booking.booking_status === 'CONFIRMED';
 
-    // 5. اقتراحات للأدمن
     const suggestions: string[] = [];
 
-    // اقتراح: لو كل الجوازات رُفضت → اقترح رفض الحجز
     if (passportsTotal > 0 && passportsRejected === passportsTotal) {
       suggestions.push(
         'كل الجوازات مرفوضة، يُنصح برفض الحجز أو طلب جوازات جديدة من المستخدم',
       );
     }
 
-    // اقتراح: لو كل وثائق العائلة مرفوضة
     if (docsTotal > 0 && docsRejected === docsTotal) {
       suggestions.push(
         'كل الوثائق مرفوضة، يُنصح برفض الحجز أو طلب وثائق جديدة',
       );
     }
 
-    // اقتراح: لو السفارة رفضت كل الجوازات (حالة هجين)
     if (embassyTotal > 0 && embassyRejected === embassyTotal) {
       suggestions.push(
         'السفارة رفضت جميع الجوازات، يُنصح برفض الحجز كاملاً',
@@ -380,7 +460,6 @@ export class BookingsService {
     }
 
     return {
-      // عدّادات الجوازات
       passports: {
         total: passportsTotal,
         uploaded: passportsUploaded,
@@ -388,27 +467,22 @@ export class BookingsService {
         rejected: passportsRejected,
         pending: passportsPending,
       },
-      // عدّادات الوثائق
       documents: {
         total: docsTotal,
         approved: docsApproved,
         rejected: docsRejected,
         pending: docsPending,
       },
-      // عدّادات السفارة
       embassy: {
         total: embassyTotal,
         approved: embassyApproved,
         rejected: embassyRejected,
         pending: embassyPending,
       },
-      // أزرار ذكية
       canConfirmBooking,
       canSendToEmbassy,
       canCompleteBooking,
-      // اقتراحات
       suggestions,
-      // أسباب عدم القدرة على القبول
       blockReasons: this.getBlockReasons(
         booking.booking_status,
         passportsTotal,
@@ -465,7 +539,7 @@ export class BookingsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // ✨ تحديث حالة الحجز (مع التحقق من اكتمال المراجعة)
+  // ✨ تحديث حالة الحجز
   // ─────────────────────────────────────────────────────────
   async updateStatus(id: number, dto: UpdateBookingStatusDto) {
     const booking = await this.findOne(id);
@@ -493,7 +567,6 @@ export class BookingsService {
       );
     }
 
-    // ✨ القاعدة الجديدة: لا يمكن قبول الحجز إلا بعد اكتمال المراجعة
     if (dto.booking_status === BookingStatus.CONFIRMED) {
       const workflow = (booking as any).workflow;
       if (!workflow?.canConfirmBooking) {

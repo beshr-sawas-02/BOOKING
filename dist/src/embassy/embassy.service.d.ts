@@ -137,6 +137,9 @@ export declare class EmbassyService {
                 duration_days: number;
                 price_per_person: Prisma.Decimal;
                 max_participants: number;
+                supervisor_name: string | null;
+                supervisor_phone: string | null;
+                supervisor_email: string | null;
             };
         } & {
             created_at: Date;

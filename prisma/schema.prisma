@@ -109,8 +109,14 @@ model Package {
   duration_days    Int
   price_per_person Decimal     @db.Decimal(10, 2)
   max_participants Int
-  created_at       DateTime    @default(now())
-  updated_at       DateTime    @updatedAt
+
+  // ✨ جديد: بيانات مشرف الرحلة (مشرف واحد لكل باقة)
+  supervisor_name  String?
+  supervisor_phone String?
+  supervisor_email String?
+
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
 
   bookings       Booking[]
   package_hotels PackageHotel[]

@@ -8,4 +8,7 @@ export declare class CreatePackageDto {
     price_per_person: number;
     max_participants: number;
     hotel_ids?: number[];
+    supervisor_name?: string | null;
+    supervisor_phone?: string | null;
+    supervisor_email?: string | null;
 }

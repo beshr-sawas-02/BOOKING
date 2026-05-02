@@ -21,6 +21,9 @@ class CreatePackageDto {
     price_per_person;
     max_participants;
     hotel_ids;
+    supervisor_name;
+    supervisor_phone;
+    supervisor_email;
 }
 exports.CreatePackageDto = CreatePackageDto;
 __decorate([
@@ -60,4 +63,22 @@ __decorate([
     (0, class_validator_1.IsArray)(),
     __metadata("design:type", Array)
 ], CreatePackageDto.prototype, "hotel_ids", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateIf)((o, value) => value !== null),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", Object)
+], CreatePackageDto.prototype, "supervisor_name", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateIf)((o, value) => value !== null),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", Object)
+], CreatePackageDto.prototype, "supervisor_phone", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.ValidateIf)((o, value) => value !== null),
+    (0, class_validator_1.IsEmail)(),
+    __metadata("design:type", Object)
+], CreatePackageDto.prototype, "supervisor_email", void 0);
 //# sourceMappingURL=create-package.dto.js.map
