@@ -40,6 +40,9 @@ let AdminsController = class AdminsController {
     getBookingsGrowth(query) {
         return this.adminsService.getBookingsGrowth(query.period);
     }
+    getInbox() {
+        return this.adminsService.getInbox();
+    }
     findAll(query) {
         return this.adminsService.findAll(query);
     }
@@ -83,6 +86,12 @@ __decorate([
     __metadata("design:paramtypes", [stats_query_dto_1.GrowthQueryDto]),
     __metadata("design:returntype", void 0)
 ], AdminsController.prototype, "getBookingsGrowth", null);
+__decorate([
+    (0, common_1.Get)('inbox'),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", []),
+    __metadata("design:returntype", void 0)
+], AdminsController.prototype, "getInbox", null);
 __decorate([
     (0, common_1.Get)(),
     __param(0, (0, common_1.Query)()),

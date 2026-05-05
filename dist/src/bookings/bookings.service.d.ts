@@ -32,10 +32,10 @@ export declare class BookingsService {
             user_id: bigint | null;
             updated_at: Date;
             booking_id: bigint;
+            passport_id: bigint | null;
+            participant_id: bigint;
             relation_type: import(".prisma/client").$Enums.RelationType;
             is_primary: boolean;
-            participant_id: bigint;
-            passport_id: bigint | null;
             family_proof_id: bigint | null;
         }[];
         created_at: Date;
@@ -49,56 +49,7 @@ export declare class BookingsService {
         final_payment_due_date: Date | null;
         trip_end_date: Date | null;
     }>;
-    findAll(filters: BookingsFilterDto): Promise<import("../common/dto/pagination.dto").PaginatedResponse<{
-        user: {
-            email: string;
-            full_name: string;
-            phone_number: string | null;
-            user_id: bigint;
-        };
-        package: {
-            package_id: bigint;
-            package_title: string;
-            package_type: import(".prisma/client").$Enums.PackageType;
-            duration_days: number;
-        };
-        booking_participants: {
-            full_name: string;
-            passport: {
-                verified_by_admin: boolean;
-                rejection_reason: string | null;
-                passport_id: bigint;
-            } | null;
-            relation_type: import(".prisma/client").$Enums.RelationType;
-            is_primary: boolean;
-            participant_id: bigint;
-            passport_id: bigint | null;
-        }[];
-        family_proof_documents: {
-            verification_status: import(".prisma/client").$Enums.VerificationStatus;
-            document_id: bigint;
-        }[];
-        _count: {
-            booking_participants: number;
-            family_proof_documents: number;
-            embassy_results: number;
-        };
-        embassy_results: {
-            embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
-            result_id: bigint;
-        }[];
-    } & {
-        created_at: Date;
-        user_id: bigint;
-        updated_at: Date;
-        booking_status: import(".prisma/client").$Enums.BookingStatus;
-        booking_id: bigint;
-        package_id: bigint;
-        total_price: Prisma.Decimal;
-        deposit_due_date: Date | null;
-        final_payment_due_date: Date | null;
-        trip_end_date: Date | null;
-    }>>;
+    findAll(filters: BookingsFilterDto): Promise<import("../common/dto/pagination.dto").PaginatedResponse<any>>;
     findMyBookings(userId: number, filters: BookingsFilterDto): Promise<import("../common/dto/pagination.dto").PaginatedResponse<{
         package: {
             created_at: Date;
@@ -121,19 +72,19 @@ export declare class BookingsService {
                 user_id: bigint;
                 updated_at: Date;
                 verified_by_admin: boolean;
-                gender: import(".prisma/client").$Enums.Gender | null;
-                date_of_birth: Date | null;
-                rejection_reason: string | null;
-                participant_id: bigint | null;
                 passport_id: bigint;
+                participant_id: bigint | null;
                 full_name_en: string | null;
                 full_name_ar: string | null;
                 passport_number: string;
                 nationality: string | null;
+                gender: import(".prisma/client").$Enums.Gender | null;
+                date_of_birth: Date | null;
                 issue_date: Date | null;
                 expiry_date: Date | null;
                 ai_extracted: boolean;
                 extraction_confidence: number | null;
+                rejection_reason: string | null;
                 sent_to_embassy: boolean;
             } | null;
             family_proof: {
@@ -156,17 +107,17 @@ export declare class BookingsService {
             user_id: bigint | null;
             updated_at: Date;
             booking_id: bigint;
+            passport_id: bigint | null;
+            participant_id: bigint;
             relation_type: import(".prisma/client").$Enums.RelationType;
             is_primary: boolean;
-            participant_id: bigint;
-            passport_id: bigint | null;
             family_proof_id: bigint | null;
         })[];
         embassy_results: {
             embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
             booking_id: bigint;
-            rejection_reason: string | null;
             passport_id: bigint;
+            rejection_reason: string | null;
             result_id: bigint;
             notes: string | null;
             uploaded_at: Date;
@@ -265,8 +216,8 @@ export declare class BookingsService {
                 passport_images: {
                     passport_id: bigint;
                     uploaded_at: Date;
-                    image_url: string;
                     image_id: bigint;
+                    image_url: string;
                     image_type: import(".prisma/client").$Enums.ImageType;
                 }[];
             } & {
@@ -274,19 +225,19 @@ export declare class BookingsService {
                 user_id: bigint;
                 updated_at: Date;
                 verified_by_admin: boolean;
-                gender: import(".prisma/client").$Enums.Gender | null;
-                date_of_birth: Date | null;
-                rejection_reason: string | null;
-                participant_id: bigint | null;
                 passport_id: bigint;
+                participant_id: bigint | null;
                 full_name_en: string | null;
                 full_name_ar: string | null;
                 passport_number: string;
                 nationality: string | null;
+                gender: import(".prisma/client").$Enums.Gender | null;
+                date_of_birth: Date | null;
                 issue_date: Date | null;
                 expiry_date: Date | null;
                 ai_extracted: boolean;
                 extraction_confidence: number | null;
+                rejection_reason: string | null;
                 sent_to_embassy: boolean;
             }) | null;
             family_proof: {
@@ -309,10 +260,10 @@ export declare class BookingsService {
             user_id: bigint | null;
             updated_at: Date;
             booking_id: bigint;
+            passport_id: bigint | null;
+            participant_id: bigint;
             relation_type: import(".prisma/client").$Enums.RelationType;
             is_primary: boolean;
-            participant_id: bigint;
-            passport_id: bigint | null;
             family_proof_id: bigint | null;
         })[];
         family_proof_documents: ({
@@ -345,8 +296,8 @@ export declare class BookingsService {
         } & {
             embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
             booking_id: bigint;
-            rejection_reason: string | null;
             passport_id: bigint;
+            rejection_reason: string | null;
             result_id: bigint;
             notes: string | null;
             uploaded_at: Date;

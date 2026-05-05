@@ -122,6 +122,7 @@ let BookingsService = class BookingsService {
                             package_title: true,
                             package_type: true,
                             duration_days: true,
+                            price_per_person: true,
                         },
                     },
                     booking_participants: {
@@ -163,7 +164,11 @@ let BookingsService = class BookingsService {
                 orderBy: { created_at: 'desc' },
             }),
         ]);
-        return (0, pagination_dto_1.buildPaginatedResponse)(bookings, total, page, limit);
+        const bookingsWithWorkflow = bookings.map((b) => ({
+            ...b,
+            workflow: this.computeWorkflowStatus(b),
+        }));
+        return (0, pagination_dto_1.buildPaginatedResponse)(bookingsWithWorkflow, total, page, limit);
     }
     async findMyBookings(userId, filters) {
         const page = filters.page ?? 1;

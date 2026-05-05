@@ -129,78 +129,85 @@ export class BookingsService {
   // قائمة الحجوزات للأدمن
   // ─────────────────────────────────────────────────────────
   async findAll(filters: BookingsFilterDto) {
-    const page = filters.page ?? 1;
-    const limit = filters.limit ?? 10;
-    const search = filters.search?.trim();
+  const page = filters.page ?? 1;
+  const limit = filters.limit ?? 10;
+  const search = filters.search?.trim();
 
-    const where = this.buildWhereClause(filters, search);
-    const { skip, take } = getPaginationParams(page, limit);
+  const where = this.buildWhereClause(filters, search);
+  const { skip, take } = getPaginationParams(page, limit);
 
-    const [total, bookings] = await Promise.all([
-      this.prisma.booking.count({ where }),
-      this.prisma.booking.findMany({
-        where,
-        skip,
-        take,
-        include: {
-          user: {
-            select: {
-              user_id: true,
-              full_name: true,
-              email: true,
-              phone_number: true,
-            },
+  const [total, bookings] = await Promise.all([
+    this.prisma.booking.count({ where }),
+    this.prisma.booking.findMany({
+      where,
+      skip,
+      take,
+      include: {
+        user: {
+          select: {
+            user_id: true,
+            full_name: true,
+            email: true,
+            phone_number: true,
           },
-          package: {
-            select: {
-              package_id: true,
-              package_title: true,
-              package_type: true,
-              duration_days: true,
-            },
+        },
+        package: {
+          select: {
+            package_id: true,
+            package_title: true,
+            package_type: true,
+            duration_days: true,
+            price_per_person: true,
           },
-          booking_participants: {
-            select: {
-              participant_id: true,
-              full_name: true,
-              relation_type: true,
-              is_primary: true,
-              passport_id: true,
-              passport: {
-                select: {
-                  passport_id: true,
-                  verified_by_admin: true,
-                  rejection_reason: true,
-                },
+        },
+        booking_participants: {
+          select: {
+            participant_id: true,
+            full_name: true,
+            relation_type: true,
+            is_primary: true,
+            passport_id: true,
+            passport: {
+              select: {
+                passport_id: true,
+                verified_by_admin: true,
+                rejection_reason: true,
               },
             },
           },
-          family_proof_documents: {
-            select: {
-              document_id: true,
-              verification_status: true,
-            },
-          },
-          embassy_results: {
-            select: {
-              result_id: true,
-              embassy_status: true,
-            },
-          },
-          _count: {
-            select: {
-              booking_participants: true,
-              embassy_results: true,
-              family_proof_documents: true,
-            },
+        },
+        family_proof_documents: {
+          select: {
+            document_id: true,
+            verification_status: true,
           },
         },
-        orderBy: { created_at: 'desc' },
-      }),
-    ]);
+        embassy_results: {
+          select: {
+            result_id: true,
+            embassy_status: true,
+          },
+        },
+        _count: {
+          select: {
+            booking_participants: true,
+            embassy_results: true,
+            family_proof_documents: true,
+          },
+        },
+      },
+      orderBy: { created_at: 'desc' },
+    }),
+  ]);
 
-    return buildPaginatedResponse(bookings, total, page, limit);
-  }
+  // ✨ احسب workflow لكل حجز
+  const bookingsWithWorkflow = bookings.map((b: any) => ({
+    ...b,
+    workflow: this.computeWorkflowStatus(b),
+  }));
+
+  return buildPaginatedResponse(bookingsWithWorkflow, total, page, limit);
+}
 
   async findMyBookings(userId: number, filters: BookingsFilterDto) {
     const page = filters.page ?? 1;

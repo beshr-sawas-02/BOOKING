@@ -72,9 +72,9 @@ export declare class FamilyProofController {
             };
             booking_participants: {
                 full_name: string;
+                participant_id: bigint;
                 relation_type: import(".prisma/client").$Enums.RelationType;
                 is_primary: boolean;
-                participant_id: bigint;
             }[];
         } & {
             created_at: Date;
@@ -117,8 +117,8 @@ export declare class FamilyProofController {
     findByBooking(bookingId: number): Promise<({
         booking_participants: {
             full_name: string;
-            relation_type: import(".prisma/client").$Enums.RelationType;
             participant_id: bigint;
+            relation_type: import(".prisma/client").$Enums.RelationType;
         }[];
         uploader: {
             email: string;
@@ -162,10 +162,10 @@ export declare class FamilyProofController {
                 user_id: bigint | null;
                 updated_at: Date;
                 booking_id: bigint;
+                passport_id: bigint | null;
+                participant_id: bigint;
                 relation_type: import(".prisma/client").$Enums.RelationType;
                 is_primary: boolean;
-                participant_id: bigint;
-                passport_id: bigint | null;
                 family_proof_id: bigint | null;
             }[];
         } & {
@@ -186,10 +186,10 @@ export declare class FamilyProofController {
             user_id: bigint | null;
             updated_at: Date;
             booking_id: bigint;
+            passport_id: bigint | null;
+            participant_id: bigint;
             relation_type: import(".prisma/client").$Enums.RelationType;
             is_primary: boolean;
-            participant_id: bigint;
-            passport_id: bigint | null;
             family_proof_id: bigint | null;
         }[];
         uploader: {
@@ -258,10 +258,10 @@ export declare class FamilyProofController {
         user_id: bigint | null;
         updated_at: Date;
         booking_id: bigint;
+        passport_id: bigint | null;
+        participant_id: bigint;
         relation_type: import(".prisma/client").$Enums.RelationType;
         is_primary: boolean;
-        participant_id: bigint;
-        passport_id: bigint | null;
         family_proof_id: bigint | null;
     }>;
 }

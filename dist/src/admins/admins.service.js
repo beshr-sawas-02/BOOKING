@@ -311,6 +311,76 @@ let AdminsService = class AdminsService {
             count: Number(r.count),
         }));
     }
+    async getInbox() {
+        const [pendingPassports, pendingDocs, pendingEmbassy] = await Promise.all([
+            this.prisma.passport.findMany({
+                where: {
+                    verified_by_admin: false,
+                    rejection_reason: null,
+                },
+                take: 50,
+                orderBy: { created_at: 'asc' },
+                include: {
+                    passport_images: { take: 1 },
+                    participant: {
+                        include: {
+                            booking: {
+                                include: {
+                                    user: { select: { full_name: true, email: true } },
+                                    package: { select: { package_title: true, package_type: true } },
+                                },
+                            },
+                        },
+                    },
+                },
+            }),
+            this.prisma.familyProofDocument.findMany({
+                where: { verification_status: 'PENDING' },
+                take: 50,
+                orderBy: { created_at: 'asc' },
+                include: {
+                    booking: {
+                        include: {
+                            user: { select: { full_name: true, email: true } },
+                            package: { select: { package_title: true, package_type: true } },
+                        },
+                    },
+                    uploader: { select: { full_name: true } },
+                },
+            }),
+            this.prisma.embassyResult.findMany({
+                where: { embassy_status: 'PENDING' },
+                take: 50,
+                orderBy: { uploaded_at: 'asc' },
+                include: {
+                    passport: {
+                        select: {
+                            full_name_en: true,
+                            full_name_ar: true,
+                            passport_number: true,
+                        },
+                    },
+                    booking: {
+                        include: {
+                            user: { select: { full_name: true } },
+                            package: { select: { package_title: true } },
+                        },
+                    },
+                },
+            }),
+        ]);
+        return {
+            counts: {
+                passports: pendingPassports.length,
+                documents: pendingDocs.length,
+                embassy: pendingEmbassy.length,
+                total: pendingPassports.length + pendingDocs.length + pendingEmbassy.length,
+            },
+            passports: pendingPassports,
+            documents: pendingDocs,
+            embassy: pendingEmbassy,
+        };
+    }
 };
 exports.AdminsService = AdminsService;
 exports.AdminsService = AdminsService = __decorate([

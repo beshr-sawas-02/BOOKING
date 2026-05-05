@@ -27,7 +27,7 @@ export class AdminsController {
   constructor(private adminsService: AdminsService) {}
 
   // ─────────────────────────────────────────────────────────
-  // Dashboard & Stats
+  // Dashboard & Stats (static routes - يجب أن تكون أولاً)
   // ─────────────────────────────────────────────────────────
 
   /**
@@ -66,6 +66,15 @@ export class AdminsController {
     return this.adminsService.getBookingsGrowth(query.period!);
   }
 
+  /**
+   * ✨ GET /api/admins/inbox
+   * صندوق الوارد - كل العناصر بانتظار المراجعة
+   */
+  @Get('inbox')
+  getInbox() {
+    return this.adminsService.getInbox();
+  }
+
   // ─────────────────────────────────────────────────────────
   // إدارة الأدمنز
   // ─────────────────────────────────────────────────────────
@@ -79,6 +88,10 @@ export class AdminsController {
     return this.adminsService.findAll(query);
   }
 
+  /**
+   * GET /api/admins/:id
+   * ⚠️ يجب أن يكون آخر GET route لأن :id يلتقط أي string
+   */
   @Get(':id')
   findOne(@Param('id', ParseIntPipe) id: number) {
     return this.adminsService.findOne(id);

@@ -47,8 +47,8 @@ export declare class EmbassyController {
     } & {
         embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
         booking_id: bigint;
-        rejection_reason: string | null;
         passport_id: bigint;
+        rejection_reason: string | null;
         result_id: bigint;
         notes: string | null;
         uploaded_at: Date;
@@ -64,8 +64,8 @@ export declare class EmbassyController {
     } & {
         embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
         booking_id: bigint;
-        rejection_reason: string | null;
         passport_id: bigint;
+        rejection_reason: string | null;
         result_id: bigint;
         notes: string | null;
         uploaded_at: Date;
@@ -109,8 +109,8 @@ export declare class EmbassyController {
             passport_images: {
                 passport_id: bigint;
                 uploaded_at: Date;
-                image_url: string;
                 image_id: bigint;
+                image_url: string;
                 image_type: import(".prisma/client").$Enums.ImageType;
             }[];
         } & {
@@ -118,26 +118,26 @@ export declare class EmbassyController {
             user_id: bigint;
             updated_at: Date;
             verified_by_admin: boolean;
-            gender: import(".prisma/client").$Enums.Gender | null;
-            date_of_birth: Date | null;
-            rejection_reason: string | null;
-            participant_id: bigint | null;
             passport_id: bigint;
+            participant_id: bigint | null;
             full_name_en: string | null;
             full_name_ar: string | null;
             passport_number: string;
             nationality: string | null;
+            gender: import(".prisma/client").$Enums.Gender | null;
+            date_of_birth: Date | null;
             issue_date: Date | null;
             expiry_date: Date | null;
             ai_extracted: boolean;
             extraction_confidence: number | null;
+            rejection_reason: string | null;
             sent_to_embassy: boolean;
         };
     } & {
         embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
         booking_id: bigint;
-        rejection_reason: string | null;
         passport_id: bigint;
+        rejection_reason: string | null;
         result_id: bigint;
         notes: string | null;
         uploaded_at: Date;
@@ -154,8 +154,8 @@ export declare class EmbassyController {
         } & {
             embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
             booking_id: bigint;
-            rejection_reason: string | null;
             passport_id: bigint;
+            rejection_reason: string | null;
             result_id: bigint;
             notes: string | null;
             uploaded_at: Date;
@@ -191,8 +191,8 @@ export declare class EmbassyController {
     } & {
         embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
         booking_id: bigint;
-        rejection_reason: string | null;
         passport_id: bigint;
+        rejection_reason: string | null;
         result_id: bigint;
         notes: string | null;
         uploaded_at: Date;
