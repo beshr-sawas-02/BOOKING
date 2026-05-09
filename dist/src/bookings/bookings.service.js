@@ -247,6 +247,41 @@ let BookingsService = class BookingsService {
         const workflow = this.computeWorkflowStatus(booking);
         return { ...booking, workflow };
     }
+    async sendToEmbassy(bookingId) {
+        const booking = await this.findOne(bookingId);
+        if (booking.booking_status !== 'CONFIRMED') {
+            throw new common_1.BadRequestException('لا يمكن الإرسال للسفارة قبل تأكيد الحجز');
+        }
+        const workflow = booking.workflow;
+        if (!workflow?.canSendToEmbassy) {
+            if (workflow?.embassy?.total > 0) {
+                throw new common_1.BadRequestException('تم الإرسال للسفارة مسبقاً');
+            }
+            throw new common_1.BadRequestException('لا يمكن الإرسال للسفارة، يجب اعتماد جميع الجوازات أولاً');
+        }
+        const verifiedPassports = booking.booking_participants
+            .filter((p) => p.passport?.verified_by_admin === true)
+            .map((p) => p.passport);
+        if (verifiedPassports.length === 0) {
+            throw new common_1.BadRequestException('لا يوجد جوازات معتمدة لإرسالها للسفارة');
+        }
+        await this.prisma.$transaction(verifiedPassports.map((passport) => this.prisma.embassyResult.create({
+            data: {
+                booking_id: BigInt(bookingId),
+                passport_id: passport.passport_id,
+                embassy_status: 'PENDING',
+            },
+        })));
+        await this.prisma.passport.updateMany({
+            where: {
+                passport_id: {
+                    in: verifiedPassports.map((p) => p.passport_id),
+                },
+            },
+            data: { sent_to_embassy: true },
+        });
+        return this.findOne(bookingId);
+    }
     async generateItineraryPdf(bookingId, userId, isAdmin) {
         const booking = await this.prisma.booking.findUnique({
             where: { booking_id: BigInt(bookingId) },

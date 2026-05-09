@@ -77,7 +77,7 @@ export class BookingsController {
   @Roles('user', 'admin')
   async downloadItinerary(
     @Param('id', ParseIntPipe) id: number,
-    @CurrentUser() user: any, // ← any لأنه يستقبل user أو admin
+    @CurrentUser() user: any,
     @Res() res: Response,
   ) {
     const isAdmin = user.role === 'admin';
@@ -108,6 +108,17 @@ export class BookingsController {
     @Body() dto: UpdateBookingStatusDto,
   ) {
     return this.bookingsService.updateStatus(id, dto);
+  }
+
+  /**
+   * ✨ POST /api/bookings/:id/send-to-embassy
+   * إرسال جوازات الحجز للسفارة (ينشئ embassy_results بحالة PENDING)
+   */
+  @Post(':id/send-to-embassy')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  sendToEmbassy(@Param('id', ParseIntPipe) id: number) {
+    return this.bookingsService.sendToEmbassy(id);
   }
 
   @Patch(':id/cancel')

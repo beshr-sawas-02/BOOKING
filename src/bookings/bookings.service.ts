@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
-import { PdfService } from '../pdf/pdf.service'; // ✨ جديد
+import { PdfService } from '../pdf/pdf.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import { BookingsFilterDto } from './dto/bookings-filter.dto';
@@ -20,13 +20,13 @@ import {
   calcAge,
   Gender,
 } from './validators/mahram.validator';
-import { generateItineraryHtml } from './templates/itinerary.template'; // ✨ جديد
+import { generateItineraryHtml } from './templates/itinerary.template';
 
 @Injectable()
 export class BookingsService {
   constructor(
     private prisma: PrismaService,
-    private pdfService: PdfService, // ✨ جديد
+    private pdfService: PdfService,
   ) {}
 
   private mahramValidator = new MahramValidator();
@@ -129,85 +129,85 @@ export class BookingsService {
   // قائمة الحجوزات للأدمن
   // ─────────────────────────────────────────────────────────
   async findAll(filters: BookingsFilterDto) {
-  const page = filters.page ?? 1;
-  const limit = filters.limit ?? 10;
-  const search = filters.search?.trim();
+    const page = filters.page ?? 1;
+    const limit = filters.limit ?? 10;
+    const search = filters.search?.trim();
 
-  const where = this.buildWhereClause(filters, search);
-  const { skip, take } = getPaginationParams(page, limit);
+    const where = this.buildWhereClause(filters, search);
+    const { skip, take } = getPaginationParams(page, limit);
 
-  const [total, bookings] = await Promise.all([
-    this.prisma.booking.count({ where }),
-    this.prisma.booking.findMany({
-      where,
-      skip,
-      take,
-      include: {
-        user: {
-          select: {
-            user_id: true,
-            full_name: true,
-            email: true,
-            phone_number: true,
+    const [total, bookings] = await Promise.all([
+      this.prisma.booking.count({ where }),
+      this.prisma.booking.findMany({
+        where,
+        skip,
+        take,
+        include: {
+          user: {
+            select: {
+              user_id: true,
+              full_name: true,
+              email: true,
+              phone_number: true,
+            },
           },
-        },
-        package: {
-          select: {
-            package_id: true,
-            package_title: true,
-            package_type: true,
-            duration_days: true,
-            price_per_person: true,
+          package: {
+            select: {
+              package_id: true,
+              package_title: true,
+              package_type: true,
+              duration_days: true,
+              price_per_person: true,
+            },
           },
-        },
-        booking_participants: {
-          select: {
-            participant_id: true,
-            full_name: true,
-            relation_type: true,
-            is_primary: true,
-            passport_id: true,
-            passport: {
-              select: {
-                passport_id: true,
-                verified_by_admin: true,
-                rejection_reason: true,
+          booking_participants: {
+            select: {
+              participant_id: true,
+              full_name: true,
+              relation_type: true,
+              is_primary: true,
+              passport_id: true,
+              passport: {
+                select: {
+                  passport_id: true,
+                  verified_by_admin: true,
+                  rejection_reason: true,
+                },
               },
             },
           },
-        },
-        family_proof_documents: {
-          select: {
-            document_id: true,
-            verification_status: true,
+          family_proof_documents: {
+            select: {
+              document_id: true,
+              verification_status: true,
+            },
+          },
+          embassy_results: {
+            select: {
+              result_id: true,
+              embassy_status: true,
+            },
+          },
+          _count: {
+            select: {
+              booking_participants: true,
+              embassy_results: true,
+              family_proof_documents: true,
+            },
           },
         },
-        embassy_results: {
-          select: {
-            result_id: true,
-            embassy_status: true,
-          },
-        },
-        _count: {
-          select: {
-            booking_participants: true,
-            embassy_results: true,
-            family_proof_documents: true,
-          },
-        },
-      },
-      orderBy: { created_at: 'desc' },
-    }),
-  ]);
+        orderBy: { created_at: 'desc' },
+      }),
+    ]);
 
-  // ✨ احسب workflow لكل حجز
-  const bookingsWithWorkflow = bookings.map((b: any) => ({
-    ...b,
-    workflow: this.computeWorkflowStatus(b),
-  }));
+    // ✨ احسب workflow لكل حجز
+    const bookingsWithWorkflow = bookings.map((b: any) => ({
+      ...b,
+      workflow: this.computeWorkflowStatus(b),
+    }));
 
-  return buildPaginatedResponse(bookingsWithWorkflow, total, page, limit);
-}
+    return buildPaginatedResponse(bookingsWithWorkflow, total, page, limit);
+  }
 
   async findMyBookings(userId: number, filters: BookingsFilterDto) {
     const page = filters.page ?? 1;
@@ -291,14 +291,72 @@ export class BookingsService {
     });
     if (!booking) throw new NotFoundException('Booking not found');
 
-    // ✨ احسب الـ workflow status
     const workflow = this.computeWorkflowStatus(booking);
 
     return { ...booking, workflow };
   }
 
   // ─────────────────────────────────────────────────────────
-  // ✨ جديد: توليد PDF لجدول الرحلة
+  // ✨ جديد: إرسال الحجز للسفارة
+  // ─────────────────────────────────────────────────────────
+  async sendToEmbassy(bookingId: number) {
+    const booking = await this.findOne(bookingId);
+
+    if (booking.booking_status !== 'CONFIRMED') {
+      throw new BadRequestException(
+        'لا يمكن الإرسال للسفارة قبل تأكيد الحجز',
+      );
+    }
+
+    const workflow = (booking as any).workflow;
+    if (!workflow?.canSendToEmbassy) {
+      if (workflow?.embassy?.total > 0) {
+        throw new BadRequestException('تم الإرسال للسفارة مسبقاً');
+      }
+      throw new BadRequestException(
+        'لا يمكن الإرسال للسفارة، يجب اعتماد جميع الجوازات أولاً',
+      );
+    }
+
+    // اجلب الجوازات المعتمدة من المشاركين
+    const verifiedPassports = booking.booking_participants
+      .filter((p: any) => p.passport?.verified_by_admin === true)
+      .map((p: any) => p.passport);
+
+    if (verifiedPassports.length === 0) {
+      throw new BadRequestException(
+        'لا يوجد جوازات معتمدة لإرسالها للسفارة',
+      );
+    }
+
+    // أنشئ embassy_results بحالة PENDING لكل جواز
+    await this.prisma.$transaction(
+      verifiedPassports.map((passport: any) =>
+        this.prisma.embassyResult.create({
+          data: {
+            booking_id: BigInt(bookingId),
+            passport_id: passport.passport_id,
+            embassy_status: 'PENDING',
+          },
+        }),
+      ),
+    );
+
+    // علّم الجوازات بأنها أُرسلت للسفارة
+    await this.prisma.passport.updateMany({
+      where: {
+        passport_id: {
+          in: verifiedPassports.map((p: any) => p.passport_id),
+        },
+      },
+      data: { sent_to_embassy: true },
+    });
+
+    return this.findOne(bookingId);
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // ✨ توليد PDF لجدول الرحلة
   // ─────────────────────────────────────────────────────────
   async generateItineraryPdf(
     bookingId: number,
@@ -320,7 +378,6 @@ export class BookingsService {
 
     if (!booking) throw new NotFoundException('Booking not found');
 
-    // التحقق من الصلاحية: يجب أن يكون المالك أو أدمن
     if (!isAdmin && booking.user_id.toString() !== userId.toString()) {
       throw new ForbiddenException('Access denied');
     }
