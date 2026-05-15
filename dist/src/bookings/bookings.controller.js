@@ -41,9 +41,7 @@ let BookingsController = class BookingsController {
     }
     async downloadItinerary(id, user, res) {
         const isAdmin = user.role === 'admin';
-        const userId = isAdmin
-            ? Number(user.admin_id)
-            : Number(user.user_id);
+        const userId = isAdmin ? Number(user.admin_id) : Number(user.user_id);
         const pdfBuffer = await this.bookingsService.generateItineraryPdf(id, userId, isAdmin);
         res.set({
             'Content-Type': 'application/pdf',
@@ -54,9 +52,6 @@ let BookingsController = class BookingsController {
     }
     updateStatus(id, dto) {
         return this.bookingsService.updateStatus(id, dto);
-    }
-    sendToEmbassy(id) {
-        return this.bookingsService.sendToEmbassy(id);
     }
     cancel(id, user) {
         return this.bookingsService.cancel(id, Number(user.user_id));
@@ -123,15 +118,6 @@ __decorate([
     __metadata("design:paramtypes", [Number, update_booking_status_dto_1.UpdateBookingStatusDto]),
     __metadata("design:returntype", void 0)
 ], BookingsController.prototype, "updateStatus", null);
-__decorate([
-    (0, common_1.Post)(':id/send-to-embassy'),
-    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('admin'),
-    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
-    __metadata("design:returntype", void 0)
-], BookingsController.prototype, "sendToEmbassy", null);
 __decorate([
     (0, common_1.Patch)(':id/cancel'),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),

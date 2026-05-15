@@ -238,34 +238,34 @@ export class PassportsService {
   }
 
   async findOne(id: number) {
-    const passport = await this.prisma.passport.findUnique({
-      where: { passport_id: BigInt(id) },
-      include: {
-        passport_images: { orderBy: { uploaded_at: 'desc' } },
-        participant: {
-          include: {
-            booking: {
-              include: {
-                package: true,
-                user: {
-                  select: {
-                    user_id: true,
-                    full_name: true,
-                    email: true,
-                    phone_number: true,
-                  },
+  const passport = await this.prisma.passport.findUnique({
+    where: { passport_id: BigInt(id) },
+    include: {
+      passport_images: { orderBy: { uploaded_at: 'desc' } },
+      participant: {
+        include: {
+          booking: {
+            include: {
+              package: true,
+              user: {
+                select: {
+                  user_id: true,
+                  full_name: true,
+                  email: true,
+                  phone_number: true,
                 },
               },
+              // ✨ نجيب نتيجة السفارة من خلال الـ booking
+              embassy_result: true,
             },
           },
         },
-        embassy_results: true,
       },
-    });
-    if (!passport) throw new NotFoundException('Passport not found');
-    return passport;
-  }
-
+    },
+  });
+  if (!passport) throw new NotFoundException('Passport not found');
+  return passport;
+}
   // ─────────────────────────────────────────────────────────
   // رفع صورة الجواز + استدعاء AI تلقائياً
   // ─────────────────────────────────────────────────────────

@@ -91,6 +91,8 @@ export declare class FamilyProofService {
             deposit_due_date: Date | null;
             final_payment_due_date: Date | null;
             trip_end_date: Date | null;
+            rejection_reason: string | null;
+            sent_to_embassy_at: Date | null;
         };
         uploader: {
             email: string;
@@ -183,6 +185,8 @@ export declare class FamilyProofService {
             deposit_due_date: Date | null;
             final_payment_due_date: Date | null;
             trip_end_date: Date | null;
+            rejection_reason: string | null;
+            sent_to_embassy_at: Date | null;
         };
         booking_participants: {
             full_name: string;

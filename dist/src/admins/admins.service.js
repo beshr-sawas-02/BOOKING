@@ -312,7 +312,7 @@ let AdminsService = class AdminsService {
         }));
     }
     async getInbox() {
-        const [pendingPassports, pendingDocs, pendingEmbassy] = await Promise.all([
+        const [pendingPassports, pendingDocs, bookingsAwaitingEmbassy] = await Promise.all([
             this.prisma.passport.findMany({
                 where: {
                     verified_by_admin: false,
@@ -327,7 +327,9 @@ let AdminsService = class AdminsService {
                             booking: {
                                 include: {
                                     user: { select: { full_name: true, email: true } },
-                                    package: { select: { package_title: true, package_type: true } },
+                                    package: {
+                                        select: { package_title: true, package_type: true },
+                                    },
                                 },
                             },
                         },
@@ -342,29 +344,25 @@ let AdminsService = class AdminsService {
                     booking: {
                         include: {
                             user: { select: { full_name: true, email: true } },
-                            package: { select: { package_title: true, package_type: true } },
+                            package: {
+                                select: { package_title: true, package_type: true },
+                            },
                         },
                     },
                     uploader: { select: { full_name: true } },
                 },
             }),
-            this.prisma.embassyResult.findMany({
-                where: { embassy_status: 'PENDING' },
+            this.prisma.booking.findMany({
+                where: {
+                    booking_status: 'CONFIRMED',
+                    embassy_result: null,
+                },
                 take: 50,
-                orderBy: { uploaded_at: 'asc' },
+                orderBy: { created_at: 'asc' },
                 include: {
-                    passport: {
-                        select: {
-                            full_name_en: true,
-                            full_name_ar: true,
-                            passport_number: true,
-                        },
-                    },
-                    booking: {
-                        include: {
-                            user: { select: { full_name: true } },
-                            package: { select: { package_title: true } },
-                        },
+                    user: { select: { full_name: true, email: true } },
+                    package: {
+                        select: { package_title: true, package_type: true },
                     },
                 },
             }),
@@ -373,12 +371,29 @@ let AdminsService = class AdminsService {
             counts: {
                 passports: pendingPassports.length,
                 documents: pendingDocs.length,
-                embassy: pendingEmbassy.length,
-                total: pendingPassports.length + pendingDocs.length + pendingEmbassy.length,
+                embassy: bookingsAwaitingEmbassy.length,
+                total: pendingPassports.length +
+                    pendingDocs.length +
+                    bookingsAwaitingEmbassy.length,
             },
             passports: pendingPassports,
             documents: pendingDocs,
-            embassy: pendingEmbassy,
+            embassy: bookingsAwaitingEmbassy.map((b) => ({
+                result_id: 0,
+                booking_id: b.booking_id,
+                embassy_status: 'PENDING',
+                notes: null,
+                rejection_reason: null,
+                matched_name: null,
+                uploaded_at: b.created_at,
+                updated_at: null,
+                booking: {
+                    booking_id: b.booking_id,
+                    user: b.user,
+                    package: b.package,
+                    booking_participants: [],
+                },
+            })),
         };
     }
 };

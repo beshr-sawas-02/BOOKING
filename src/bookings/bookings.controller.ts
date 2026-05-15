@@ -51,10 +51,6 @@ export class BookingsController {
   // Admin endpoints
   // ─────────────────────────────────────────────────────────
 
-  /**
-   * GET /api/bookings?page=1&limit=10&status=PENDING&search=ahmad
-   *   &package_type=HAJJ&from_date=2026-01-01&to_date=2026-12-31
-   */
   @Get()
   @UseGuards(RolesGuard)
   @Roles('admin')
@@ -67,11 +63,6 @@ export class BookingsController {
     return this.bookingsService.findOne(id);
   }
 
-  // ─────────────────────────────────────────────────────────
-  // ✨ تحميل PDF لجدول الرحلة
-  // GET /api/bookings/:id/itinerary-pdf
-  // متاح للمستخدم (صاحب الحجز) والأدمن
-  // ─────────────────────────────────────────────────────────
   @Get(':id/itinerary-pdf')
   @UseGuards(RolesGuard)
   @Roles('user', 'admin')
@@ -81,9 +72,7 @@ export class BookingsController {
     @Res() res: Response,
   ) {
     const isAdmin = user.role === 'admin';
-    const userId = isAdmin
-      ? Number(user.admin_id)
-      : Number(user.user_id);
+    const userId = isAdmin ? Number(user.admin_id) : Number(user.user_id);
 
     const pdfBuffer = await this.bookingsService.generateItineraryPdf(
       id,
@@ -108,17 +97,6 @@ export class BookingsController {
     @Body() dto: UpdateBookingStatusDto,
   ) {
     return this.bookingsService.updateStatus(id, dto);
-  }
-
-  /**
-   * ✨ POST /api/bookings/:id/send-to-embassy
-   * إرسال جوازات الحجز للسفارة (ينشئ embassy_results بحالة PENDING)
-   */
-  @Post(':id/send-to-embassy')
-  @UseGuards(RolesGuard)
-  @Roles('admin')
-  sendToEmbassy(@Param('id', ParseIntPipe) id: number) {
-    return this.bookingsService.sendToEmbassy(id);
   }
 
   @Patch(':id/cancel')

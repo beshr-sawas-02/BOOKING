@@ -10,11 +10,13 @@ exports.EmbassyModule = void 0;
 const common_1 = require("@nestjs/common");
 const embassy_service_1 = require("./embassy.service");
 const embassy_controller_1 = require("./embassy.controller");
+const notifications_module_1 = require("../notifications/notifications.module");
 let EmbassyModule = class EmbassyModule {
 };
 exports.EmbassyModule = EmbassyModule;
 exports.EmbassyModule = EmbassyModule = __decorate([
     (0, common_1.Module)({
+        imports: [notifications_module_1.NotificationsModule],
         controllers: [embassy_controller_1.EmbassyController],
         providers: [embassy_service_1.EmbassyService],
         exports: [embassy_service_1.EmbassyService],

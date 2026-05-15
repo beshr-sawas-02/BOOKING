@@ -9,9 +9,6 @@ export class UpdateEmbassyResultDto {
   @IsString()
   notes?: string;
 
-  /**
-   * سبب الرفض — مطلوب فقط إذا embassy_status = REJECTED
-   */
   @ValidateIf((o) => o.embassy_status === EmbassyStatus.REJECTED)
   @IsString()
   rejection_reason?: string;

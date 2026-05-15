@@ -4,13 +4,11 @@ import { BookingsController } from './bookings.controller';
 import { FamilyProofService } from './family-proof.service';
 import { FamilyProofController } from './family-proof.controller';
 import { UploadModule } from '../upload/upload.module';
-import { PdfModule } from '../pdf/pdf.module'; // ✨ جديد
+import { PdfModule } from '../pdf/pdf.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [
-    UploadModule,
-    PdfModule, // ✨ جديد - نحتاجه لتوليد PDF لجدول الرحلة
-  ],
+  imports: [UploadModule, PdfModule, NotificationsModule],
   controllers: [BookingsController, FamilyProofController],
   providers: [BookingsService, FamilyProofService],
   exports: [BookingsService],

@@ -8,10 +8,6 @@ export class EmbassyFilterDto extends PaginationDto {
   status?: EmbassyStatus;
 
   @IsOptional()
-  @IsNumberString()
-  booking_id?: string;
-
-  @IsOptional()
   @IsDateString()
   from_date?: string;
 

@@ -8,7 +8,12 @@ import {
   Query,
   UseGuards,
   ParseIntPipe,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { memoryStorage } from 'multer';
 import { EmbassyService } from './embassy.service';
 import { UpdateEmbassyResultDto } from './dto/update-embassy-result.dto';
 import { EmbassyFilterDto } from './dto/embassy-filter.dto';
@@ -16,28 +21,59 @@ import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { RolesGuard } from '../common/guards/roles.guard';
 import { Roles } from '../common/decorators/roles.decorator';
 
+// إعدادات رفع Excel
+const excelUploadOptions = {
+  storage: memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  fileFilter: (_req: any, file: any, cb: any) => {
+    const allowed = [
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'application/octet-stream', // أحياناً Excel
+    ];
+    if (
+      !allowed.includes(file.mimetype) &&
+      !file.originalname.match(/\.(xlsx|xls)$/i)
+    ) {
+      return cb(
+        new BadRequestException('يُسمح فقط بملفات Excel (.xlsx, .xls)'),
+        false,
+      );
+    }
+    cb(null, true);
+  },
+};
+
 @Controller('embassy')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 export class EmbassyController {
   constructor(private embassyService: EmbassyService) {}
 
-  // ─────────────────────────────────────────────────────────
-  // Stats
-  // ─────────────────────────────────────────────────────────
+  /**
+   * ✨ POST /api/embassy/upload-excel
+   * رفع ملف Excel من السفارة
+   *
+   * الـ Excel لازم يكون فيه:
+   * - العمود الأول: اسم مقدم الحجز
+   * - العمود الثاني: الحالة (مقبول/مرفوض)
+   * - العمود الثالث: سبب الرفض (اختياري - مطلوب فقط للرفض)
+   *
+   * الصف الأول = هيدر (يتم تجاوزه)
+   */
+  @Post('upload-excel')
+  @UseInterceptors(FileInterceptor('file', excelUploadOptions))
+  uploadExcel(@UploadedFile() file: any) {
+    return this.embassyService.uploadEmbassyExcel(file);
+  }
 
   /**
    * GET /api/embassy/stats
-   * إحصائيات نتائج السفارة
    */
   @Get('stats')
   getStats() {
     return this.embassyService.getStats();
   }
-
-  // ─────────────────────────────────────────────────────────
-  // Listing
-  // ─────────────────────────────────────────────────────────
 
   /**
    * GET /api/embassy?page=1&limit=10&status=PENDING&search=...
@@ -49,7 +85,6 @@ export class EmbassyController {
 
   /**
    * GET /api/embassy/booking/:bookingId
-   * نتائج السفارة لحجز معين
    */
   @Get('booking/:bookingId')
   findByBooking(@Param('bookingId', ParseIntPipe) bookingId: number) {
@@ -58,29 +93,15 @@ export class EmbassyController {
 
   /**
    * GET /api/embassy/:resultId
-   * تفاصيل نتيجة واحدة
    */
   @Get(':resultId')
   findOne(@Param('resultId', ParseIntPipe) resultId: number) {
     return this.embassyService.findOne(resultId);
   }
 
-  // ─────────────────────────────────────────────────────────
-  // Actions
-  // ─────────────────────────────────────────────────────────
-
-  /**
-   * POST /api/embassy/submit/:bookingId
-   * إرسال جوازات الحجز للسفارة
-   */
-  @Post('submit/:bookingId')
-  submitToEmbassy(@Param('bookingId', ParseIntPipe) bookingId: number) {
-    return this.embassyService.submitBookingToEmbassy(bookingId);
-  }
-
   /**
    * PATCH /api/embassy/results/:resultId
-   * تحديث نتيجة السفارة (قبول/رفض مع سبب)
+   * تحديث يدوي لنتيجة السفارة (في حال الحاجة)
    */
   @Patch('results/:resultId')
   updateResult(

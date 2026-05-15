@@ -14,16 +14,37 @@ var __param = (this && this.__param) || function (paramIndex, decorator) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.EmbassyController = void 0;
 const common_1 = require("@nestjs/common");
+const platform_express_1 = require("@nestjs/platform-express");
+const multer_1 = require("multer");
 const embassy_service_1 = require("./embassy.service");
 const update_embassy_result_dto_1 = require("./dto/update-embassy-result.dto");
 const embassy_filter_dto_1 = require("./dto/embassy-filter.dto");
 const jwt_auth_guard_1 = require("../common/guards/jwt-auth.guard");
 const roles_guard_1 = require("../common/guards/roles.guard");
 const roles_decorator_1 = require("../common/decorators/roles.decorator");
+const excelUploadOptions = {
+    storage: (0, multer_1.memoryStorage)(),
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, cb) => {
+        const allowed = [
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-excel',
+            'application/octet-stream',
+        ];
+        if (!allowed.includes(file.mimetype) &&
+            !file.originalname.match(/\.(xlsx|xls)$/i)) {
+            return cb(new common_1.BadRequestException('يُسمح فقط بملفات Excel (.xlsx, .xls)'), false);
+        }
+        cb(null, true);
+    },
+};
 let EmbassyController = class EmbassyController {
     embassyService;
     constructor(embassyService) {
         this.embassyService = embassyService;
+    }
+    uploadExcel(file) {
+        return this.embassyService.uploadEmbassyExcel(file);
     }
     getStats() {
         return this.embassyService.getStats();
@@ -37,14 +58,19 @@ let EmbassyController = class EmbassyController {
     findOne(resultId) {
         return this.embassyService.findOne(resultId);
     }
-    submitToEmbassy(bookingId) {
-        return this.embassyService.submitBookingToEmbassy(bookingId);
-    }
     updateResult(resultId, dto) {
         return this.embassyService.updateResult(resultId, dto);
     }
 };
 exports.EmbassyController = EmbassyController;
+__decorate([
+    (0, common_1.Post)('upload-excel'),
+    (0, common_1.UseInterceptors)((0, platform_express_1.FileInterceptor)('file', excelUploadOptions)),
+    __param(0, (0, common_1.UploadedFile)()),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Object]),
+    __metadata("design:returntype", void 0)
+], EmbassyController.prototype, "uploadExcel", null);
 __decorate([
     (0, common_1.Get)('stats'),
     __metadata("design:type", Function),
@@ -72,13 +98,6 @@ __decorate([
     __metadata("design:paramtypes", [Number]),
     __metadata("design:returntype", void 0)
 ], EmbassyController.prototype, "findOne", null);
-__decorate([
-    (0, common_1.Post)('submit/:bookingId'),
-    __param(0, (0, common_1.Param)('bookingId', common_1.ParseIntPipe)),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
-    __metadata("design:returntype", void 0)
-], EmbassyController.prototype, "submitToEmbassy", null);
 __decorate([
     (0, common_1.Patch)('results/:resultId'),
     __param(0, (0, common_1.Param)('resultId', common_1.ParseIntPipe)),

@@ -207,11 +207,11 @@ let PassportsService = class PassportsService {
                                         phone_number: true,
                                     },
                                 },
+                                embassy_result: true,
                             },
                         },
                     },
                 },
-                embassy_results: true,
             },
         });
         if (!passport)

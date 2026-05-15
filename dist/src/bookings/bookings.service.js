@@ -13,6 +13,7 @@ exports.BookingsService = void 0;
 const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const pdf_service_1 = require("../pdf/pdf.service");
+const notifications_service_1 = require("../notifications/notifications.service");
 const enums_1 = require("../common/enums");
 const pagination_dto_1 = require("../common/dto/pagination.dto");
 const mahram_validator_1 = require("./validators/mahram.validator");
@@ -20,9 +21,11 @@ const itinerary_template_1 = require("./templates/itinerary.template");
 let BookingsService = class BookingsService {
     prisma;
     pdfService;
-    constructor(prisma, pdfService) {
+    notificationsService;
+    constructor(prisma, pdfService, notificationsService) {
         this.prisma = prisma;
         this.pdfService = pdfService;
+        this.notificationsService = notificationsService;
     }
     mahramValidator = new mahram_validator_1.MahramValidator();
     async create(userId, dto) {
@@ -147,16 +150,16 @@ let BookingsService = class BookingsService {
                             verification_status: true,
                         },
                     },
-                    embassy_results: {
+                    embassy_result: {
                         select: {
                             result_id: true,
                             embassy_status: true,
+                            rejection_reason: true,
                         },
                     },
                     _count: {
                         select: {
                             booking_participants: true,
-                            embassy_results: true,
                             family_proof_documents: true,
                         },
                     },
@@ -189,7 +192,7 @@ let BookingsService = class BookingsService {
                     booking_participants: {
                         include: { passport: true, family_proof: true },
                     },
-                    embassy_results: true,
+                    embassy_result: true,
                     review: true,
                 },
                 orderBy: { created_at: 'desc' },
@@ -220,18 +223,7 @@ let BookingsService = class BookingsService {
                     },
                     orderBy: { is_primary: 'desc' },
                 },
-                embassy_results: {
-                    include: {
-                        passport: {
-                            select: {
-                                passport_id: true,
-                                full_name_en: true,
-                                full_name_ar: true,
-                                passport_number: true,
-                            },
-                        },
-                    },
-                },
+                embassy_result: true,
                 family_proof_documents: {
                     include: {
                         uploader: {
@@ -246,41 +238,6 @@ let BookingsService = class BookingsService {
             throw new common_1.NotFoundException('Booking not found');
         const workflow = this.computeWorkflowStatus(booking);
         return { ...booking, workflow };
-    }
-    async sendToEmbassy(bookingId) {
-        const booking = await this.findOne(bookingId);
-        if (booking.booking_status !== 'CONFIRMED') {
-            throw new common_1.BadRequestException('لا يمكن الإرسال للسفارة قبل تأكيد الحجز');
-        }
-        const workflow = booking.workflow;
-        if (!workflow?.canSendToEmbassy) {
-            if (workflow?.embassy?.total > 0) {
-                throw new common_1.BadRequestException('تم الإرسال للسفارة مسبقاً');
-            }
-            throw new common_1.BadRequestException('لا يمكن الإرسال للسفارة، يجب اعتماد جميع الجوازات أولاً');
-        }
-        const verifiedPassports = booking.booking_participants
-            .filter((p) => p.passport?.verified_by_admin === true)
-            .map((p) => p.passport);
-        if (verifiedPassports.length === 0) {
-            throw new common_1.BadRequestException('لا يوجد جوازات معتمدة لإرسالها للسفارة');
-        }
-        await this.prisma.$transaction(verifiedPassports.map((passport) => this.prisma.embassyResult.create({
-            data: {
-                booking_id: BigInt(bookingId),
-                passport_id: passport.passport_id,
-                embassy_status: 'PENDING',
-            },
-        })));
-        await this.prisma.passport.updateMany({
-            where: {
-                passport_id: {
-                    in: verifiedPassports.map((p) => p.passport_id),
-                },
-            },
-            data: { sent_to_embassy: true },
-        });
-        return this.findOne(bookingId);
     }
     async generateItineraryPdf(bookingId, userId, isAdmin) {
         const booking = await this.prisma.booking.findUnique({
@@ -348,11 +305,12 @@ let BookingsService = class BookingsService {
     computeWorkflowStatus(booking) {
         const participants = booking.booking_participants || [];
         const docs = booking.family_proof_documents || [];
-        const embassyResults = booking.embassy_results || [];
+        const embassyResult = booking.embassy_result || null;
         const passportsTotal = participants.length;
         const passportsUploaded = participants.filter((p) => p.passport).length;
         const passportsVerified = participants.filter((p) => p.passport?.verified_by_admin === true).length;
-        const passportsRejected = participants.filter((p) => p.passport?.rejection_reason !== null && p.passport?.rejection_reason !== undefined).length;
+        const passportsRejected = participants.filter((p) => p.passport?.rejection_reason !== null &&
+            p.passport?.rejection_reason !== undefined).length;
         const passportsPending = participants.filter((p) => p.passport &&
             !p.passport.verified_by_admin &&
             !p.passport.rejection_reason).length;
@@ -360,31 +318,21 @@ let BookingsService = class BookingsService {
         const docsApproved = docs.filter((d) => d.verification_status === 'APPROVED').length;
         const docsRejected = docs.filter((d) => d.verification_status === 'REJECTED').length;
         const docsPending = docs.filter((d) => d.verification_status === 'PENDING').length;
-        const embassyTotal = embassyResults.length;
-        const embassyApproved = embassyResults.filter((e) => e.embassy_status === 'APPROVED').length;
-        const embassyRejected = embassyResults.filter((e) => e.embassy_status === 'REJECTED').length;
-        const embassyPending = embassyResults.filter((e) => e.embassy_status === 'PENDING').length;
         const allPassportsVerified = passportsTotal > 0 &&
             passportsUploaded === passportsTotal &&
             passportsVerified === passportsTotal;
-        const allDocsApproved = docsTotal === 0 ||
-            (docsTotal > 0 && docsApproved === docsTotal);
+        const allDocsApproved = docsTotal === 0 || (docsTotal > 0 && docsApproved === docsTotal);
         const canConfirmBooking = booking.booking_status === 'PENDING' &&
             allPassportsVerified &&
             allDocsApproved;
-        const canSendToEmbassy = booking.booking_status === 'CONFIRMED' &&
-            passportsVerified > 0 &&
-            embassyTotal === 0;
-        const canCompleteBooking = booking.booking_status === 'CONFIRMED';
+        const canCompleteBooking = booking.booking_status === 'CONFIRMED' &&
+            embassyResult?.embassy_status === 'APPROVED';
         const suggestions = [];
         if (passportsTotal > 0 && passportsRejected === passportsTotal) {
             suggestions.push('كل الجوازات مرفوضة، يُنصح برفض الحجز أو طلب جوازات جديدة من المستخدم');
         }
         if (docsTotal > 0 && docsRejected === docsTotal) {
-            suggestions.push('كل الوثائق مرفوضة، يُنصح برفض الحجز أو طلب وثائق جديدة');
-        }
-        if (embassyTotal > 0 && embassyRejected === embassyTotal) {
-            suggestions.push('السفارة رفضت جميع الجوازات، يُنصح برفض الحجز كاملاً');
+            suggestions.push('كل الوثائق مرفوضة، يُنصح برفض الحجز');
         }
         return {
             passports: {
@@ -400,20 +348,19 @@ let BookingsService = class BookingsService {
                 rejected: docsRejected,
                 pending: docsPending,
             },
-            embassy: {
-                total: embassyTotal,
-                approved: embassyApproved,
-                rejected: embassyRejected,
-                pending: embassyPending,
-            },
+            embassy: embassyResult
+                ? {
+                    status: embassyResult.embassy_status,
+                    rejection_reason: embassyResult.rejection_reason,
+                }
+                : null,
             canConfirmBooking,
-            canSendToEmbassy,
             canCompleteBooking,
             suggestions,
-            blockReasons: this.getBlockReasons(booking.booking_status, passportsTotal, passportsUploaded, passportsVerified, passportsPending, passportsRejected, docsTotal, docsApproved, docsPending, docsRejected),
+            blockReasons: this.getBlockReasons(booking.booking_status, passportsTotal, passportsUploaded, passportsVerified, passportsPending, passportsRejected, docsTotal, docsPending, docsRejected),
         };
     }
-    getBlockReasons(status, pTotal, pUploaded, pVerified, pPending, pRejected, dTotal, dApproved, dPending, dRejected) {
+    getBlockReasons(status, pTotal, pUploaded, pVerified, pPending, pRejected, dTotal, dPending, dRejected) {
         if (status !== 'PENDING')
             return [];
         const reasons = [];
@@ -448,6 +395,7 @@ let BookingsService = class BookingsService {
             [enums_1.BookingStatus.CONFIRMED]: [
                 enums_1.BookingStatus.COMPLETED,
                 enums_1.BookingStatus.CANCELLED,
+                enums_1.BookingStatus.REJECTED,
             ],
             [enums_1.BookingStatus.REJECTED]: [],
             [enums_1.BookingStatus.CANCELLED]: [],
@@ -465,20 +413,46 @@ let BookingsService = class BookingsService {
                 });
             }
         }
+        const reason = dto.rejection_reason || dto.reason;
         if (dto.booking_status === enums_1.BookingStatus.REJECTED) {
-            const reason = dto.rejection_reason || dto.reason;
             if (!reason || !reason.trim()) {
                 throw new common_1.BadRequestException('سبب الرفض مطلوب');
             }
         }
-        return this.prisma.booking.update({
+        const updated = await this.prisma.booking.update({
             where: { booking_id: BigInt(id) },
-            data: { booking_status: dto.booking_status },
+            data: {
+                booking_status: dto.booking_status,
+                rejection_reason: dto.booking_status === enums_1.BookingStatus.REJECTED
+                    ? reason?.trim()
+                    : null,
+            },
             include: {
-                user: { select: { full_name: true, email: true } },
+                user: { select: { user_id: true, full_name: true, email: true } },
                 package: { select: { package_title: true } },
             },
         });
+        if (dto.booking_status === enums_1.BookingStatus.CONFIRMED) {
+            await this.notificationsService.create({
+                userId: updated.user.user_id,
+                type: 'BOOKING_CONFIRMED',
+                title: '✅ تم قبول حجزك',
+                message: `تم قبول حجزك للرحلة "${updated.package.package_title}". سيتم الآن إرسال البيانات للسفارة.`,
+                relatedId: updated.booking_id,
+                relatedType: 'booking',
+            });
+        }
+        else if (dto.booking_status === enums_1.BookingStatus.REJECTED) {
+            await this.notificationsService.create({
+                userId: updated.user.user_id,
+                type: 'BOOKING_REJECTED',
+                title: '❌ تم رفض حجزك',
+                message: `للأسف تم رفض حجزك للرحلة "${updated.package.package_title}". السبب: ${reason}`,
+                relatedId: updated.booking_id,
+                relatedType: 'booking',
+            });
+        }
+        return updated;
     }
     async cancel(id, userId) {
         const booking = await this.findOne(id);
@@ -552,6 +526,7 @@ exports.BookingsService = BookingsService;
 exports.BookingsService = BookingsService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
-        pdf_service_1.PdfService])
+        pdf_service_1.PdfService,
+        notifications_service_1.NotificationsService])
 ], BookingsService);
 //# sourceMappingURL=bookings.service.js.map

@@ -87,6 +87,8 @@ export declare class AdminsController {
                     deposit_due_date: Date | null;
                     final_payment_due_date: Date | null;
                     trip_end_date: Date | null;
+                    rejection_reason: string | null;
+                    sent_to_embassy_at: Date | null;
                 };
             } & {
                 full_name: string;
@@ -105,6 +107,7 @@ export declare class AdminsController {
             user_id: bigint;
             updated_at: Date;
             verified_by_admin: boolean;
+            rejection_reason: string | null;
             passport_id: bigint;
             participant_id: bigint | null;
             full_name_en: string | null;
@@ -117,7 +120,6 @@ export declare class AdminsController {
             expiry_date: Date | null;
             ai_extracted: boolean;
             extraction_confidence: number | null;
-            rejection_reason: string | null;
             sent_to_embassy: boolean;
         })[];
         documents: ({
@@ -141,6 +143,8 @@ export declare class AdminsController {
                 deposit_due_date: Date | null;
                 final_payment_due_date: Date | null;
                 trip_end_date: Date | null;
+                rejection_reason: string | null;
+                sent_to_embassy_at: Date | null;
             };
             uploader: {
                 full_name: string;
@@ -159,40 +163,22 @@ export declare class AdminsController {
             mother_name: string | null;
             im_extracted: boolean;
         })[];
-        embassy: ({
+        embassy: {
+            result_id: number;
+            booking_id: any;
+            embassy_status: string;
+            notes: null;
+            rejection_reason: null;
+            matched_name: null;
+            uploaded_at: any;
+            updated_at: null;
             booking: {
-                user: {
-                    full_name: string;
-                };
-                package: {
-                    package_title: string;
-                };
-            } & {
-                created_at: Date;
-                user_id: bigint;
-                updated_at: Date;
-                booking_status: import(".prisma/client").$Enums.BookingStatus;
-                booking_id: bigint;
-                package_id: bigint;
-                total_price: import("@prisma/client/runtime/library").Decimal;
-                deposit_due_date: Date | null;
-                final_payment_due_date: Date | null;
-                trip_end_date: Date | null;
+                booking_id: any;
+                user: any;
+                package: any;
+                booking_participants: never[];
             };
-            passport: {
-                full_name_en: string | null;
-                full_name_ar: string | null;
-                passport_number: string;
-            };
-        } & {
-            embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
-            booking_id: bigint;
-            passport_id: bigint;
-            rejection_reason: string | null;
-            result_id: bigint;
-            notes: string | null;
-            uploaded_at: Date;
-        })[];
+        }[];
     }>;
     findAll(query: PaginationDto): Promise<import("../common/dto/pagination.dto").PaginatedResponse<{
         admin_id: string;

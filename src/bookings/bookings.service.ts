@@ -1,12 +1,13 @@
 import {
   Injectable,
   NotFoundException,
-  BadRequestException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import { BookingsFilterDto } from './dto/bookings-filter.dto';
@@ -27,6 +28,7 @@ export class BookingsService {
   constructor(
     private prisma: PrismaService,
     private pdfService: PdfService,
+    private notificationsService: NotificationsService,
   ) {}
 
   private mahramValidator = new MahramValidator();
@@ -182,16 +184,16 @@ export class BookingsService {
               verification_status: true,
             },
           },
-          embassy_results: {
+          embassy_result: {
             select: {
               result_id: true,
               embassy_status: true,
+              rejection_reason: true,
             },
           },
           _count: {
             select: {
               booking_participants: true,
-              embassy_results: true,
               family_proof_documents: true,
             },
           },
@@ -200,7 +202,6 @@ export class BookingsService {
       }),
     ]);
 
-    // ✨ احسب workflow لكل حجز
     const bookingsWithWorkflow = bookings.map((b: any) => ({
       ...b,
       workflow: this.computeWorkflowStatus(b),
@@ -231,7 +232,7 @@ export class BookingsService {
           booking_participants: {
             include: { passport: true, family_proof: true },
           },
-          embassy_results: true,
+          embassy_result: true,
           review: true,
         },
         orderBy: { created_at: 'desc' },
@@ -241,9 +242,6 @@ export class BookingsService {
     return buildPaginatedResponse(bookings, total, page, limit);
   }
 
-  // ─────────────────────────────────────────────────────────
-  // ✨ تفاصيل حجز كاملة + workflow status
-  // ─────────────────────────────────────────────────────────
   async findOne(id: number) {
     const booking = await this.prisma.booking.findUnique({
       where: { booking_id: BigInt(id) },
@@ -267,18 +265,7 @@ export class BookingsService {
           },
           orderBy: { is_primary: 'desc' },
         },
-        embassy_results: {
-          include: {
-            passport: {
-              select: {
-                passport_id: true,
-                full_name_en: true,
-                full_name_ar: true,
-                passport_number: true,
-              },
-            },
-          },
-        },
+        embassy_result: true,
         family_proof_documents: {
           include: {
             uploader: {
@@ -297,66 +284,7 @@ export class BookingsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // ✨ جديد: إرسال الحجز للسفارة
-  // ─────────────────────────────────────────────────────────
-  async sendToEmbassy(bookingId: number) {
-    const booking = await this.findOne(bookingId);
-
-    if (booking.booking_status !== 'CONFIRMED') {
-      throw new BadRequestException(
-        'لا يمكن الإرسال للسفارة قبل تأكيد الحجز',
-      );
-    }
-
-    const workflow = (booking as any).workflow;
-    if (!workflow?.canSendToEmbassy) {
-      if (workflow?.embassy?.total > 0) {
-        throw new BadRequestException('تم الإرسال للسفارة مسبقاً');
-      }
-      throw new BadRequestException(
-        'لا يمكن الإرسال للسفارة، يجب اعتماد جميع الجوازات أولاً',
-      );
-    }
-
-    // اجلب الجوازات المعتمدة من المشاركين
-    const verifiedPassports = booking.booking_participants
-      .filter((p: any) => p.passport?.verified_by_admin === true)
-      .map((p: any) => p.passport);
-
-    if (verifiedPassports.length === 0) {
-      throw new BadRequestException(
-        'لا يوجد جوازات معتمدة لإرسالها للسفارة',
-      );
-    }
-
-    // أنشئ embassy_results بحالة PENDING لكل جواز
-    await this.prisma.$transaction(
-      verifiedPassports.map((passport: any) =>
-        this.prisma.embassyResult.create({
-          data: {
-            booking_id: BigInt(bookingId),
-            passport_id: passport.passport_id,
-            embassy_status: 'PENDING',
-          },
-        }),
-      ),
-    );
-
-    // علّم الجوازات بأنها أُرسلت للسفارة
-    await this.prisma.passport.updateMany({
-      where: {
-        passport_id: {
-          in: verifiedPassports.map((p: any) => p.passport_id),
-        },
-      },
-      data: { sent_to_embassy: true },
-    });
-
-    return this.findOne(bookingId);
-  }
-
-  // ─────────────────────────────────────────────────────────
-  // ✨ توليد PDF لجدول الرحلة
+  // ✨ توليد PDF لجدول الرحلة (بدون تغيير)
   // ─────────────────────────────────────────────────────────
   async generateItineraryPdf(
     bookingId: number,
@@ -407,9 +335,6 @@ export class BookingsService {
     return await this.pdfService.generateFromHtml(html);
   }
 
-  /**
-   * تحويل enum الـ relation إلى عربي
-   */
   private translateRelation(rel: string): string {
     const map: Record<string, string> = {
       PRIMARY: 'صاحب الطلب',
@@ -434,21 +359,22 @@ export class BookingsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // ✨ حساب حالة سير العمل (Workflow)
+  // ✨ workflow معدّل - بدون embassy_results array
   // ─────────────────────────────────────────────────────────
   private computeWorkflowStatus(booking: any) {
     const participants = booking.booking_participants || [];
     const docs = booking.family_proof_documents || [];
-    const embassyResults = booking.embassy_results || [];
+    const embassyResult = booking.embassy_result || null;
 
-    // 1. حالة الجوازات
     const passportsTotal = participants.length;
     const passportsUploaded = participants.filter((p: any) => p.passport).length;
     const passportsVerified = participants.filter(
       (p: any) => p.passport?.verified_by_admin === true,
     ).length;
     const passportsRejected = participants.filter(
-      (p: any) => p.passport?.rejection_reason !== null && p.passport?.rejection_reason !== undefined,
+      (p: any) =>
+        p.passport?.rejection_reason !== null &&
+        p.passport?.rejection_reason !== undefined,
     ).length;
     const passportsPending = participants.filter(
       (p: any) =>
@@ -457,7 +383,6 @@ export class BookingsService {
         !p.passport.rejection_reason,
     ).length;
 
-    // 2. حالة الوثائق
     const docsTotal = docs.length;
     const docsApproved = docs.filter(
       (d: any) => d.verification_status === 'APPROVED',
@@ -469,39 +394,22 @@ export class BookingsService {
       (d: any) => d.verification_status === 'PENDING',
     ).length;
 
-    // 3. حالة السفارة
-    const embassyTotal = embassyResults.length;
-    const embassyApproved = embassyResults.filter(
-      (e: any) => e.embassy_status === 'APPROVED',
-    ).length;
-    const embassyRejected = embassyResults.filter(
-      (e: any) => e.embassy_status === 'REJECTED',
-    ).length;
-    const embassyPending = embassyResults.filter(
-      (e: any) => e.embassy_status === 'PENDING',
-    ).length;
-
-    // 4. الشروط للأزرار
     const allPassportsVerified =
       passportsTotal > 0 &&
       passportsUploaded === passportsTotal &&
       passportsVerified === passportsTotal;
 
     const allDocsApproved =
-      docsTotal === 0 ||
-      (docsTotal > 0 && docsApproved === docsTotal);
+      docsTotal === 0 || (docsTotal > 0 && docsApproved === docsTotal);
 
     const canConfirmBooking =
       booking.booking_status === 'PENDING' &&
       allPassportsVerified &&
       allDocsApproved;
 
-    const canSendToEmbassy =
+    const canCompleteBooking =
       booking.booking_status === 'CONFIRMED' &&
-      passportsVerified > 0 &&
-      embassyTotal === 0;
-
-    const canCompleteBooking = booking.booking_status === 'CONFIRMED';
+      embassyResult?.embassy_status === 'APPROVED';
 
     const suggestions: string[] = [];
 
@@ -512,15 +420,7 @@ export class BookingsService {
     }
 
     if (docsTotal > 0 && docsRejected === docsTotal) {
-      suggestions.push(
-        'كل الوثائق مرفوضة، يُنصح برفض الحجز أو طلب وثائق جديدة',
-      );
-    }
-
-    if (embassyTotal > 0 && embassyRejected === embassyTotal) {
-      suggestions.push(
-        'السفارة رفضت جميع الجوازات، يُنصح برفض الحجز كاملاً',
-      );
+      suggestions.push('كل الوثائق مرفوضة، يُنصح برفض الحجز');
     }
 
     return {
@@ -537,14 +437,13 @@ export class BookingsService {
         rejected: docsRejected,
         pending: docsPending,
       },
-      embassy: {
-        total: embassyTotal,
-        approved: embassyApproved,
-        rejected: embassyRejected,
-        pending: embassyPending,
-      },
+      embassy: embassyResult
+        ? {
+            status: embassyResult.embassy_status,
+            rejection_reason: embassyResult.rejection_reason,
+          }
+        : null,
       canConfirmBooking,
-      canSendToEmbassy,
       canCompleteBooking,
       suggestions,
       blockReasons: this.getBlockReasons(
@@ -555,7 +454,6 @@ export class BookingsService {
         passportsPending,
         passportsRejected,
         docsTotal,
-        docsApproved,
         docsPending,
         docsRejected,
       ),
@@ -570,7 +468,6 @@ export class BookingsService {
     pPending: number,
     pRejected: number,
     dTotal: number,
-    dApproved: number,
     dPending: number,
     dRejected: number,
   ): string[] {
@@ -582,9 +479,7 @@ export class BookingsService {
       reasons.push('لا يوجد مشاركون في الحجز');
     }
     if (pUploaded < pTotal) {
-      reasons.push(
-        `${pTotal - pUploaded} مشارك لم يرفع جوازه بعد`,
-      );
+      reasons.push(`${pTotal - pUploaded} مشارك لم يرفع جوازه بعد`);
     }
     if (pPending > 0) {
       reasons.push(`${pPending} جواز بانتظار المراجعة`);
@@ -603,7 +498,7 @@ export class BookingsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // ✨ تحديث حالة الحجز
+  // ✨ تحديث حالة الحجز + إشعارات
   // ─────────────────────────────────────────────────────────
   async updateStatus(id: number, dto: UpdateBookingStatusDto) {
     const booking = await this.findOne(id);
@@ -617,6 +512,7 @@ export class BookingsService {
       [BookingStatus.CONFIRMED]: [
         BookingStatus.COMPLETED,
         BookingStatus.CANCELLED,
+        BookingStatus.REJECTED, // ممكن السفارة ترفض → تنقل لـ REJECTED
       ],
       [BookingStatus.REJECTED]: [],
       [BookingStatus.CANCELLED]: [],
@@ -641,21 +537,51 @@ export class BookingsService {
       }
     }
 
+    const reason = dto.rejection_reason || dto.reason;
+
     if (dto.booking_status === BookingStatus.REJECTED) {
-      const reason = dto.rejection_reason || dto.reason;
       if (!reason || !reason.trim()) {
         throw new BadRequestException('سبب الرفض مطلوب');
       }
     }
 
-    return this.prisma.booking.update({
+    const updated = await this.prisma.booking.update({
       where: { booking_id: BigInt(id) },
-      data: { booking_status: dto.booking_status },
+      data: {
+        booking_status: dto.booking_status,
+        rejection_reason:
+          dto.booking_status === BookingStatus.REJECTED
+            ? reason?.trim()
+            : null,
+      },
       include: {
-        user: { select: { full_name: true, email: true } },
+        user: { select: { user_id: true, full_name: true, email: true } },
         package: { select: { package_title: true } },
       },
     });
+
+    // ✨ إرسال إشعار للمستخدم
+    if (dto.booking_status === BookingStatus.CONFIRMED) {
+      await this.notificationsService.create({
+        userId: updated.user.user_id,
+        type: 'BOOKING_CONFIRMED',
+        title: '✅ تم قبول حجزك',
+        message: `تم قبول حجزك للرحلة "${updated.package.package_title}". سيتم الآن إرسال البيانات للسفارة.`,
+        relatedId: updated.booking_id,
+        relatedType: 'booking',
+      });
+    } else if (dto.booking_status === BookingStatus.REJECTED) {
+      await this.notificationsService.create({
+        userId: updated.user.user_id,
+        type: 'BOOKING_REJECTED',
+        title: '❌ تم رفض حجزك',
+        message: `للأسف تم رفض حجزك للرحلة "${updated.package.package_title}". السبب: ${reason}`,
+        relatedId: updated.booking_id,
+        relatedType: 'booking',
+      });
+    }
+
+    return updated;
   }
 
   async cancel(id: number, userId: number) {

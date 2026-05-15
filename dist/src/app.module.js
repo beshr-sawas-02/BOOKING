@@ -23,6 +23,7 @@ const reviews_module_1 = require("./reviews/reviews.module");
 const upload_module_1 = require("./upload/upload.module");
 const ai_module_1 = require("./ai/ai.module");
 const pdf_module_1 = require("./pdf/pdf.module");
+const notifications_module_1 = require("./notifications/notifications.module");
 const all_exceptions_filter_1 = require("./common/filters/all-exceptions.filter");
 let AppModule = class AppModule {
 };
@@ -44,6 +45,7 @@ exports.AppModule = AppModule = __decorate([
             upload_module_1.UploadModule,
             ai_module_1.AiModule,
             pdf_module_1.PdfModule,
+            notifications_module_1.NotificationsModule,
         ],
         providers: [{ provide: core_1.APP_FILTER, useClass: all_exceptions_filter_1.AllExceptionsFilter }],
     })
