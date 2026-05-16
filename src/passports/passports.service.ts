@@ -40,7 +40,6 @@ export class PassportsService {
     if (participant.passport_id)
       throw new BadRequestException('Participant already has a passport');
 
-    // فصل image_url عن باقي بيانات الجواز
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { image_url, participant_id: _ignore, ...passportData } = dto;
 
@@ -146,8 +145,7 @@ export class PassportsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // جوازات تنتظر المراجعة — مرتبة حسب الأولوية
-  // الجوازات بـ confidence منخفض تظهر أولاً (أولوية المراجعة)
+  // جوازات تنتظر المراجعة
   // ─────────────────────────────────────────────────────────
   async findPendingVerification(filters: PassportsFilterDto) {
     const page = filters.page ?? 1;
@@ -177,11 +175,7 @@ export class PassportsService {
             select: { user_id: true, full_name: true, email: true },
           },
         },
-        // الأولوية: confidence منخفض أولاً (nulls last)
-        orderBy: [
-          { extraction_confidence: { sort: 'asc', nulls: 'last' } },
-          { created_at: 'asc' },
-        ],
+        orderBy: { created_at: 'asc' },
       }),
     ]);
 
@@ -192,15 +186,7 @@ export class PassportsService {
   // إحصائيات الجوازات للـ dashboard
   // ─────────────────────────────────────────────────────────
   async getStats() {
-    const [
-      total,
-      verified,
-      pending,
-      rejected,
-      sentToEmbassy,
-      lowConfidence,
-      aiExtracted,
-    ] = await Promise.all([
+    const [total, verified, pending, rejected] = await Promise.all([
       this.prisma.passport.count(),
       this.prisma.passport.count({ where: { verified_by_admin: true } }),
       this.prisma.passport.count({
@@ -209,14 +195,6 @@ export class PassportsService {
       this.prisma.passport.count({
         where: { rejection_reason: { not: null } },
       }),
-      this.prisma.passport.count({ where: { sent_to_embassy: true } }),
-      this.prisma.passport.count({
-        where: {
-          extraction_confidence: { lt: 0.6 },
-          verified_by_admin: false,
-        },
-      }),
-      this.prisma.passport.count({ where: { ai_extracted: true } }),
     ]);
 
     return {
@@ -224,9 +202,6 @@ export class PassportsService {
       verified,
       pending,
       rejected,
-      sentToEmbassy,
-      lowConfidence,
-      aiExtracted,
     };
   }
 
@@ -237,35 +212,38 @@ export class PassportsService {
     });
   }
 
+  // ─────────────────────────────────────────────────────────
+  // ✨ معدّل: السفارة من خلال الـ booking (one-to-one)
+  // ─────────────────────────────────────────────────────────
   async findOne(id: number) {
-  const passport = await this.prisma.passport.findUnique({
-    where: { passport_id: BigInt(id) },
-    include: {
-      passport_images: { orderBy: { uploaded_at: 'desc' } },
-      participant: {
-        include: {
-          booking: {
-            include: {
-              package: true,
-              user: {
-                select: {
-                  user_id: true,
-                  full_name: true,
-                  email: true,
-                  phone_number: true,
+    const passport = await this.prisma.passport.findUnique({
+      where: { passport_id: BigInt(id) },
+      include: {
+        passport_images: { orderBy: { uploaded_at: 'desc' } },
+        participant: {
+          include: {
+            booking: {
+              include: {
+                package: true,
+                user: {
+                  select: {
+                    user_id: true,
+                    full_name: true,
+                    email: true,
+                    phone_number: true,
+                  },
                 },
+                embassy_result: true,
               },
-              // ✨ نجيب نتيجة السفارة من خلال الـ booking
-              embassy_result: true,
             },
           },
         },
       },
-    },
-  });
-  if (!passport) throw new NotFoundException('Passport not found');
-  return passport;
-}
+    });
+    if (!passport) throw new NotFoundException('Passport not found');
+    return passport;
+  }
+
   // ─────────────────────────────────────────────────────────
   // رفع صورة الجواز + استدعاء AI تلقائياً
   // ─────────────────────────────────────────────────────────
@@ -352,7 +330,6 @@ export class PassportsService {
   async verifyPassport(id: number, dto: VerifyPassportDto) {
     await this.findOne(id);
 
-    // إذا الرفض → السبب مطلوب (DTO يتحقق منه، لكن double-check)
     if (
       dto.verified_by_admin === false &&
       (!dto.rejection_reason || !dto.rejection_reason.trim())
@@ -360,14 +337,12 @@ export class PassportsService {
       throw new BadRequestException('سبب الرفض مطلوب');
     }
 
-    // فصل rejection_reason عن باقي البيانات
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { rejection_reason, verified_by_admin, ...passportData } = dto;
 
     const updateData: Prisma.PassportUpdateInput = {
       ...passportData,
       verified_by_admin,
-      // إذا رفض → خزّن السبب، إذا قبول → امسحه (في حال كان مرفوض سابقاً)
       rejection_reason: verified_by_admin
         ? null
         : rejection_reason?.trim() ?? null,
@@ -394,16 +369,6 @@ export class PassportsService {
           },
         },
       },
-    });
-  }
-
-  async markSentToEmbassy(id: number) {
-    const passport = await this.findOne(id);
-    if (!passport.verified_by_admin)
-      throw new BadRequestException('Passport must be verified first');
-    return this.prisma.passport.update({
-      where: { passport_id: BigInt(id) },
-      data: { sent_to_embassy: true },
     });
   }
 
@@ -444,18 +409,6 @@ export class PassportsService {
 
     if (filters.verified !== undefined) {
       where.verified_by_admin = filters.verified;
-    }
-
-    if (filters.sent_to_embassy !== undefined) {
-      where.sent_to_embassy = filters.sent_to_embassy;
-    }
-
-    if (filters.confidence_level === 'low') {
-      where.extraction_confidence = { lt: 0.6 };
-    } else if (filters.confidence_level === 'medium') {
-      where.extraction_confidence = { gte: 0.6, lt: 0.8 };
-    } else if (filters.confidence_level === 'high') {
-      where.extraction_confidence = { gte: 0.8 };
     }
 
     if (filters.booking_id) {

@@ -59,9 +59,6 @@ let PassportsController = class PassportsController {
     verify(id, dto) {
         return this.passportsService.verifyPassport(id, dto);
     }
-    sendToEmbassy(id) {
-        return this.passportsService.markSentToEmbassy(id);
-    }
 };
 exports.PassportsController = PassportsController;
 __decorate([
@@ -145,15 +142,6 @@ __decorate([
     __metadata("design:paramtypes", [Number, verify_passport_dto_1.VerifyPassportDto]),
     __metadata("design:returntype", void 0)
 ], PassportsController.prototype, "verify", null);
-__decorate([
-    (0, common_1.Patch)(':id/send-to-embassy'),
-    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
-    (0, roles_decorator_1.Roles)('admin'),
-    __param(0, (0, common_1.Param)('id', common_1.ParseIntPipe)),
-    __metadata("design:type", Function),
-    __metadata("design:paramtypes", [Number]),
-    __metadata("design:returntype", void 0)
-], PassportsController.prototype, "sendToEmbassy", null);
 exports.PassportsController = PassportsController = __decorate([
     (0, common_1.Controller)('passports'),
     (0, common_1.UseGuards)(jwt_auth_guard_1.JwtAuthGuard),

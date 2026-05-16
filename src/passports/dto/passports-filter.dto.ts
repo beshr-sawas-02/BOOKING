@@ -19,26 +19,6 @@ export class PassportsFilterDto extends PaginationDto {
   verified?: boolean;
 
   /**
-   * فلتر حسب الإرسال للسفارة
-   */
-  @IsOptional()
-  @Transform(({ value }) => {
-    if (value === 'true' || value === true) return true;
-    if (value === 'false' || value === false) return false;
-    return undefined;
-  })
-  @IsBoolean()
-  sent_to_embassy?: boolean;
-
-  /**
-   * فلتر حسب الـ confidence:
-   * - low → confidence < 0.6 (أولوية المراجعة)
-   * - high → confidence >= 0.8
-   */
-  @IsOptional()
-  confidence_level?: 'low' | 'medium' | 'high';
-
-  /**
    * فلتر حسب الحجز
    */
   @IsOptional()

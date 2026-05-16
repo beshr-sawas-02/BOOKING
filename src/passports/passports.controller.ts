@@ -52,7 +52,7 @@ export class PassportsController {
   // ─────────────────────────────────────────────────────────
 
   /**
-   * GET /api/passports?page=1&limit=10&verified=false&confidence_level=low
+   * GET /api/passports?page=1&limit=10&verified=false
    * قائمة كل الجوازات مع pagination + filters
    */
   @Get()
@@ -64,7 +64,7 @@ export class PassportsController {
 
   /**
    * GET /api/passports/pending?page=1&limit=10
-   * جوازات تنتظر المراجعة — مرتبة حسب الأولوية (confidence منخفض أولاً)
+   * جوازات تنتظر المراجعة
    */
   @Get('pending')
   @UseGuards(RolesGuard)
@@ -129,12 +129,5 @@ export class PassportsController {
     @Body() dto: VerifyPassportDto,
   ) {
     return this.passportsService.verifyPassport(id, dto);
-  }
-
-  @Patch(':id/send-to-embassy')
-  @UseGuards(RolesGuard)
-  @Roles('admin')
-  sendToEmbassy(@Param('id', ParseIntPipe) id: number) {
-    return this.passportsService.markSentToEmbassy(id);
   }
 }

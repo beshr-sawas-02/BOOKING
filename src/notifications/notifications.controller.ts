@@ -11,7 +11,7 @@ import {
 import { NotificationsService } from './notifications.service';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { PaginationDto } from '../common/dto/pagination.dto';
+import { NotificationsFilterDto } from './dto/notifications-filter.dto'; // ✨ جديد
 
 @Controller('notifications')
 @UseGuards(JwtAuthGuard)
@@ -25,7 +25,7 @@ export class NotificationsController {
   @Get()
   findMine(
     @CurrentUser() user: any,
-    @Query() query: PaginationDto & { unreadOnly?: string },
+    @Query() query: NotificationsFilterDto, // ✨ تغيّر النوع
   ) {
     return this.notificationsService.findMyNotifications(
       Number(user.user_id ?? user.admin_id),
@@ -38,7 +38,6 @@ export class NotificationsController {
 
   /**
    * GET /api/notifications/unread-count
-   * عدد الإشعارات غير المقروءة (للبادج في الأعلى)
    */
   @Get('unread-count')
   getUnreadCount(@CurrentUser() user: any) {
@@ -49,7 +48,6 @@ export class NotificationsController {
 
   /**
    * PATCH /api/notifications/:id/read
-   * تعليم إشعار كمقروء
    */
   @Patch(':id/read')
   markAsRead(
@@ -64,7 +62,6 @@ export class NotificationsController {
 
   /**
    * PATCH /api/notifications/read-all
-   * تعليم كل الإشعارات كمقروءة
    */
   @Patch('read-all')
   markAllAsRead(@CurrentUser() user: any) {
@@ -75,7 +72,6 @@ export class NotificationsController {
 
   /**
    * DELETE /api/notifications/:id
-   * حذف إشعار
    */
   @Delete(':id')
   delete(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
@@ -87,7 +83,6 @@ export class NotificationsController {
 
   /**
    * DELETE /api/notifications
-   * حذف كل الإشعارات
    */
   @Delete()
   deleteAll(@CurrentUser() user: any) {
