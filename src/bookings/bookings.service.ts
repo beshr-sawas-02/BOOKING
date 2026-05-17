@@ -8,10 +8,14 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PdfService } from '../pdf/pdf.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import {
+  PaymentsService,
+  DEPOSIT_PERCENTAGE,
+} from '../payments/payments.service'; // ✨ جديد
 import { CreateBookingDto } from './dto/create-booking.dto';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto';
 import { BookingsFilterDto } from './dto/bookings-filter.dto';
-import { BookingStatus } from '../common/enums';
+import { BookingStatus, PaymentType } from '../common/enums';
 import {
   buildPaginatedResponse,
   getPaginationParams,
@@ -29,12 +33,48 @@ export class BookingsService {
     private prisma: PrismaService,
     private pdfService: PdfService,
     private notificationsService: NotificationsService,
+    private paymentsService: PaymentsService, // ✨ جديد
   ) {}
 
   private mahramValidator = new MahramValidator();
 
   // ─────────────────────────────────────────────────────────
-  // إنشاء حجز جديد (للمستخدم)
+  // ✨ جديد: حساب العربون قبل الإنشاء
+  // ─────────────────────────────────────────────────────────
+  async calculateDeposit(packageId: number, participantsCount: number) {
+    const pkg = await this.prisma.package.findUnique({
+      where: { package_id: BigInt(packageId) },
+    });
+    if (!pkg) throw new NotFoundException('Package not found');
+
+    if (participantsCount < 1) {
+      throw new BadRequestException('عدد المشاركين يجب أن يكون 1 على الأقل');
+    }
+
+    if (participantsCount > pkg.max_participants) {
+      throw new BadRequestException(
+        `الحد الأقصى للمشاركين في هذه الباقة هو ${pkg.max_participants}`,
+      );
+    }
+
+    const totalPrice = Number(pkg.price_per_person) * participantsCount;
+    const depositAmount = totalPrice * DEPOSIT_PERCENTAGE;
+    const finalAmount = totalPrice - depositAmount;
+
+    return {
+      package_id: pkg.package_id.toString(),
+      package_title: pkg.package_title,
+      price_per_person: Number(pkg.price_per_person),
+      participants_count: participantsCount,
+      total_price: totalPrice,
+      deposit_percentage: DEPOSIT_PERCENTAGE * 100, // 20
+      deposit_amount: depositAmount,
+      final_amount: finalAmount,
+    };
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // ✨ معدّل: إنشاء حجز + دفع العربون في transaction واحد
   // ─────────────────────────────────────────────────────────
   async create(userId: number, dto: CreateBookingDto) {
     const pkg = await this.prisma.package.findUnique({
@@ -42,13 +82,14 @@ export class BookingsService {
     });
     if (!pkg) throw new NotFoundException('Package not found');
 
-    const totalParticipants = dto.participants.length + 1;
+    const totalParticipants = dto.participants.length;
     if (totalParticipants > pkg.max_participants) {
       throw new BadRequestException(
         `الحد الأقصى للمشاركين في هذه الباقة هو ${pkg.max_participants}`,
       );
     }
 
+    // ✅ التحقق من المحارم (للحج)
     const warnings: string[] = [];
     if (pkg.package_type === 'HAJJ') {
       const companions = dto.participants
@@ -93,38 +134,80 @@ export class BookingsService {
     const hasPrimary = dto.participants.some((p) => p.is_primary);
     if (!hasPrimary) dto.participants[0].is_primary = true;
 
+    // ✅ حساب الأسعار
     const totalPrice = Number(pkg.price_per_person) * dto.participants.length;
+    const depositAmount = totalPrice * DEPOSIT_PERCENTAGE;
 
-    const booking = await this.prisma.booking.create({
-      data: {
-        user_id: BigInt(userId),
-        package_id: BigInt(dto.package_id),
-        total_price: totalPrice,
-        deposit_due_date: dto.deposit_due_date
-          ? new Date(dto.deposit_due_date)
-          : undefined,
-        final_payment_due_date: dto.final_payment_due_date
-          ? new Date(dto.final_payment_due_date)
-          : undefined,
-        trip_end_date: dto.trip_end_date
-          ? new Date(dto.trip_end_date)
-          : undefined,
-        booking_participants: {
-          create: dto.participants.map((p) => ({
-            full_name: p.full_name,
-            relation_type: p.relation_type,
-            is_primary: p.is_primary ?? false,
-            user_id: p.is_primary ? BigInt(userId) : undefined,
-          })),
+    // ✅ التحقق من مبلغ العربون قبل إنشاء الحجز
+    if (dto.payment.amount !== depositAmount) {
+      throw new BadRequestException(
+        `مبلغ العربون غير صحيح. المطلوب: ${depositAmount}, تم إرسال: ${dto.payment.amount}`,
+      );
+    }
+
+    // ✨ إنشاء الحجز + دفع العربون في transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // 1. إنشاء الحجز
+      const booking = await tx.booking.create({
+        data: {
+          user_id: BigInt(userId),
+          package_id: BigInt(dto.package_id),
+          total_price: totalPrice,
+          deposit_due_date: dto.deposit_due_date
+            ? new Date(dto.deposit_due_date)
+            : undefined,
+          final_payment_due_date: dto.final_payment_due_date
+            ? new Date(dto.final_payment_due_date)
+            : undefined,
+          trip_end_date: dto.trip_end_date
+            ? new Date(dto.trip_end_date)
+            : undefined,
+          booking_participants: {
+            create: dto.participants.map((p) => ({
+              full_name: p.full_name,
+              relation_type: p.relation_type,
+              is_primary: p.is_primary ?? false,
+              user_id: p.is_primary ? BigInt(userId) : undefined,
+            })),
+          },
         },
-      },
-      include: {
-        booking_participants: true,
-        package: true,
-      },
+        include: {
+          booking_participants: true,
+          package: true,
+        },
+      });
+
+      return booking;
     });
 
-    return { ...booking, warnings };
+    // 2. إنشاء سجل الدفع (خارج الـ transaction لأن PaymentsService يستخدم prisma)
+    try {
+      await this.paymentsService.createPayment({
+        bookingId: result.booking_id,
+        userId,
+        amount: depositAmount,
+        paymentType: PaymentType.DEPOSIT,
+        paymentData: dto.payment,
+      });
+
+      // 3. إشعار "تم استلام العربون"
+      await this.notificationsService.create({
+        userId,
+        type: 'PAYMENT_RECEIVED',
+        title: '💰 تم استلام دفعة العربون',
+        message: `تم استلام دفعة العربون (${this.formatCurrency(depositAmount)}) لحجزك "${result.package.package_title}". الحجز الآن قيد المراجعة من الإدارة.`,
+        relatedId: result.booking_id,
+        relatedType: 'booking',
+      });
+    } catch (paymentError) {
+      // لو فشل الدفع، نلغي الحجز
+      await this.prisma.booking.delete({
+        where: { booking_id: result.booking_id },
+      });
+      throw paymentError;
+    }
+
+    return { ...result, warnings };
   }
 
   // ─────────────────────────────────────────────────────────
@@ -191,6 +274,7 @@ export class BookingsService {
               rejection_reason: true,
             },
           },
+          payments: true, // ✨ جديد
           _count: {
             select: {
               booking_participants: true,
@@ -233,6 +317,7 @@ export class BookingsService {
             include: { passport: true, family_proof: true },
           },
           embassy_result: true,
+          payments: true, // ✨ جديد
           review: true,
         },
         orderBy: { created_at: 'desc' },
@@ -273,6 +358,7 @@ export class BookingsService {
             },
           },
         },
+        payments: { orderBy: { paid_at: 'desc' } }, // ✨ جديد
         review: true,
       },
     });
@@ -284,7 +370,7 @@ export class BookingsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // ✨ توليد PDF لجدول الرحلة (بدون تغيير)
+  // توليد PDF لجدول الرحلة
   // ─────────────────────────────────────────────────────────
   async generateItineraryPdf(
     bookingId: number,
@@ -359,12 +445,13 @@ export class BookingsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // ✨ workflow معدّل - بدون embassy_results array
+  // ✨ workflow معدّل - يشمل payment status
   // ─────────────────────────────────────────────────────────
   private computeWorkflowStatus(booking: any) {
     const participants = booking.booking_participants || [];
     const docs = booking.family_proof_documents || [];
     const embassyResult = booking.embassy_result || null;
+    const payments = booking.payments || []; // ✨ جديد
 
     const passportsTotal = participants.length;
     const passportsUploaded = participants.filter((p: any) => p.passport).length;
@@ -394,6 +481,23 @@ export class BookingsService {
       (d: any) => d.verification_status === 'PENDING',
     ).length;
 
+    // ✨ حساب حالة الدفع
+    const totalPrice = Number(booking.total_price);
+    const depositAmount = totalPrice * DEPOSIT_PERCENTAGE;
+    const finalAmount = totalPrice - depositAmount;
+
+    const depositPaid = payments.some(
+      (p: any) =>
+        p.payment_type === 'DEPOSIT' && p.payment_status === 'COMPLETED',
+    );
+    const finalPaid = payments.some(
+      (p: any) =>
+        p.payment_type === 'FINAL' && p.payment_status === 'COMPLETED',
+    );
+    const totalPaid = payments
+      .filter((p: any) => p.payment_status === 'COMPLETED')
+      .reduce((sum: number, p: any) => sum + Number(p.amount), 0);
+
     const allPassportsVerified =
       passportsTotal > 0 &&
       passportsUploaded === passportsTotal &&
@@ -405,11 +509,17 @@ export class BookingsService {
     const canConfirmBooking =
       booking.booking_status === 'PENDING' &&
       allPassportsVerified &&
-      allDocsApproved;
+      allDocsApproved &&
+      depositPaid; // ✨ لازم العربون مدفوع
 
     const canCompleteBooking =
       booking.booking_status === 'CONFIRMED' &&
-      embassyResult?.embassy_status === 'APPROVED';
+      embassyResult?.embassy_status === 'APPROVED' &&
+      finalPaid; // ✨ لازم الدفعة النهائية مدفوعة
+
+    // ✨ هل يجب أن يدفع المبلغ النهائي؟
+    const needsFinalPayment =
+      booking.booking_status === 'CONFIRMED' && !finalPaid;
 
     const suggestions: string[] = [];
 
@@ -443,6 +553,18 @@ export class BookingsService {
             rejection_reason: embassyResult.rejection_reason,
           }
         : null,
+      // ✨ جديد: حالة الدفع
+      payment: {
+        total_price: totalPrice,
+        deposit_amount: depositAmount,
+        final_amount: finalAmount,
+        total_paid: totalPaid,
+        remaining: totalPrice - totalPaid,
+        deposit_paid: depositPaid,
+        final_paid: finalPaid,
+        is_fully_paid: depositPaid && finalPaid,
+        needs_final_payment: needsFinalPayment,
+      },
       canConfirmBooking,
       canCompleteBooking,
       suggestions,
@@ -456,6 +578,7 @@ export class BookingsService {
         docsTotal,
         docsPending,
         docsRejected,
+        depositPaid,
       ),
     };
   }
@@ -470,11 +593,15 @@ export class BookingsService {
     dTotal: number,
     dPending: number,
     dRejected: number,
+    depositPaid: boolean,
   ): string[] {
     if (status !== 'PENDING') return [];
 
     const reasons: string[] = [];
 
+    if (!depositPaid) {
+      reasons.push('العربون غير مدفوع');
+    }
     if (pTotal === 0) {
       reasons.push('لا يوجد مشاركون في الحجز');
     }
@@ -498,7 +625,7 @@ export class BookingsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // ✨ تحديث حالة الحجز + إشعارات
+  // ✨ معدّل: تحديث حالة الحجز + إشعار طلب الدفع النهائي
   // ─────────────────────────────────────────────────────────
   async updateStatus(id: number, dto: UpdateBookingStatusDto) {
     const booking = await this.findOne(id);
@@ -512,7 +639,7 @@ export class BookingsService {
       [BookingStatus.CONFIRMED]: [
         BookingStatus.COMPLETED,
         BookingStatus.CANCELLED,
-        BookingStatus.REJECTED, // ممكن السفارة ترفض → تنقل لـ REJECTED
+        BookingStatus.REJECTED,
       ],
       [BookingStatus.REJECTED]: [],
       [BookingStatus.CANCELLED]: [],
@@ -531,7 +658,8 @@ export class BookingsService {
       const workflow = (booking as any).workflow;
       if (!workflow?.canConfirmBooking) {
         throw new BadRequestException({
-          message: 'لا يمكن قبول الحجز قبل اكتمال مراجعة الجوازات والوثائق',
+          message:
+            'لا يمكن قبول الحجز قبل اكتمال مراجعة الجوازات والوثائق ودفع العربون',
           reasons: workflow?.blockReasons || [],
         });
       }
@@ -562,11 +690,24 @@ export class BookingsService {
 
     // ✨ إرسال إشعار للمستخدم
     if (dto.booking_status === BookingStatus.CONFIRMED) {
+      // إشعار القبول
       await this.notificationsService.create({
         userId: updated.user.user_id,
         type: 'BOOKING_CONFIRMED',
         title: '✅ تم قبول حجزك',
         message: `تم قبول حجزك للرحلة "${updated.package.package_title}". سيتم الآن إرسال البيانات للسفارة.`,
+        relatedId: updated.booking_id,
+        relatedType: 'booking',
+      });
+
+      // ✨ جديد: إشعار "ادفع المبلغ المتبقي"
+      const totalPrice = Number(booking.total_price);
+      const finalAmount = totalPrice * (1 - DEPOSIT_PERCENTAGE);
+      await this.notificationsService.create({
+        userId: updated.user.user_id,
+        type: 'PAYMENT_REQUIRED',
+        title: '💳 مطلوب دفع المبلغ المتبقي',
+        message: `حجزك مقبول! يرجى دفع المبلغ المتبقي (${this.formatCurrency(finalAmount)}) لإكمال الحجز.`,
         relatedId: updated.booking_id,
         relatedType: 'booking',
       });
@@ -635,6 +776,16 @@ export class BookingsService {
           : undefined,
       },
     });
+  }
+
+  // ─────────────────────────────────────────────────────────
+  // Helpers
+  // ─────────────────────────────────────────────────────────
+
+  private formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('ar-SY', {
+      maximumFractionDigits: 0,
+    }).format(amount) + ' ل.س';
   }
 
   private buildWhereClause(

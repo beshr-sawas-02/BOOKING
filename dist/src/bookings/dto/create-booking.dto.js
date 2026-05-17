@@ -13,6 +13,7 @@ exports.CreateBookingDto = exports.CreateParticipantDto = void 0;
 const class_validator_1 = require("class-validator");
 const class_transformer_1 = require("class-transformer");
 const enums_1 = require("../../common/enums");
+const create_payment_dto_1 = require("../../payments/dto/create-payment.dto");
 class CreateParticipantDto {
     full_name;
     relation_type;
@@ -52,6 +53,7 @@ class CreateBookingDto {
     deposit_due_date;
     final_payment_due_date;
     trip_end_date;
+    payment;
 }
 exports.CreateBookingDto = CreateBookingDto;
 __decorate([
@@ -88,4 +90,9 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], CreateBookingDto.prototype, "trip_end_date", void 0);
+__decorate([
+    (0, class_validator_1.ValidateNested)(),
+    (0, class_transformer_1.Type)(() => create_payment_dto_1.CreatePaymentDto),
+    __metadata("design:type", create_payment_dto_1.CreatePaymentDto)
+], CreateBookingDto.prototype, "payment", void 0);
 //# sourceMappingURL=create-booking.dto.js.map

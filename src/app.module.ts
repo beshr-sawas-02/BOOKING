@@ -15,6 +15,7 @@ import { UploadModule } from './upload/upload.module';
 import { AiModule } from './ai/ai.module';
 import { PdfModule } from './pdf/pdf.module';
 import { NotificationsModule } from './notifications/notifications.module';
+import { PaymentsModule } from './payments/payments.module'; // ✨ جديد
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
 
 @Module({
@@ -34,6 +35,7 @@ import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
     AiModule,
     PdfModule,
     NotificationsModule,
+    PaymentsModule, // ✨ جديد
   ],
   providers: [{ provide: APP_FILTER, useClass: AllExceptionsFilter }],
 })

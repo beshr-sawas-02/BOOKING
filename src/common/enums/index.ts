@@ -58,6 +58,7 @@
 //   BACK = 'BACK',
 // }
 // إعادة تصدير من Prisma - مصدر واحد للحقيقة للـ enums
+// إعادة تصدير من Prisma - مصدر واحد للحقيقة للـ enums
 export {
   BookingStatus,
   EmbassyStatus,
@@ -67,4 +68,8 @@ export {
   Gender,
   RelationType,
   ImageType,
+  NotificationType,
+  PaymentType,       // ✨ جديد
+  PaymentStatus,     // ✨ جديد
+  PaymentMethod,     // ✨ جديد
 } from '@prisma/client';

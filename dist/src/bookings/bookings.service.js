@@ -14,6 +14,7 @@ const common_1 = require("@nestjs/common");
 const prisma_service_1 = require("../prisma/prisma.service");
 const pdf_service_1 = require("../pdf/pdf.service");
 const notifications_service_1 = require("../notifications/notifications.service");
+const payments_service_1 = require("../payments/payments.service");
 const enums_1 = require("../common/enums");
 const pagination_dto_1 = require("../common/dto/pagination.dto");
 const mahram_validator_1 = require("./validators/mahram.validator");
@@ -22,19 +23,47 @@ let BookingsService = class BookingsService {
     prisma;
     pdfService;
     notificationsService;
-    constructor(prisma, pdfService, notificationsService) {
+    paymentsService;
+    constructor(prisma, pdfService, notificationsService, paymentsService) {
         this.prisma = prisma;
         this.pdfService = pdfService;
         this.notificationsService = notificationsService;
+        this.paymentsService = paymentsService;
     }
     mahramValidator = new mahram_validator_1.MahramValidator();
+    async calculateDeposit(packageId, participantsCount) {
+        const pkg = await this.prisma.package.findUnique({
+            where: { package_id: BigInt(packageId) },
+        });
+        if (!pkg)
+            throw new common_1.NotFoundException('Package not found');
+        if (participantsCount < 1) {
+            throw new common_1.BadRequestException('عدد المشاركين يجب أن يكون 1 على الأقل');
+        }
+        if (participantsCount > pkg.max_participants) {
+            throw new common_1.BadRequestException(`الحد الأقصى للمشاركين في هذه الباقة هو ${pkg.max_participants}`);
+        }
+        const totalPrice = Number(pkg.price_per_person) * participantsCount;
+        const depositAmount = totalPrice * payments_service_1.DEPOSIT_PERCENTAGE;
+        const finalAmount = totalPrice - depositAmount;
+        return {
+            package_id: pkg.package_id.toString(),
+            package_title: pkg.package_title,
+            price_per_person: Number(pkg.price_per_person),
+            participants_count: participantsCount,
+            total_price: totalPrice,
+            deposit_percentage: payments_service_1.DEPOSIT_PERCENTAGE * 100,
+            deposit_amount: depositAmount,
+            final_amount: finalAmount,
+        };
+    }
     async create(userId, dto) {
         const pkg = await this.prisma.package.findUnique({
             where: { package_id: BigInt(dto.package_id) },
         });
         if (!pkg)
             throw new common_1.NotFoundException('Package not found');
-        const totalParticipants = dto.participants.length + 1;
+        const totalParticipants = dto.participants.length;
         if (totalParticipants > pkg.max_participants) {
             throw new common_1.BadRequestException(`الحد الأقصى للمشاركين في هذه الباقة هو ${pkg.max_participants}`);
         }
@@ -68,35 +97,65 @@ let BookingsService = class BookingsService {
         if (!hasPrimary)
             dto.participants[0].is_primary = true;
         const totalPrice = Number(pkg.price_per_person) * dto.participants.length;
-        const booking = await this.prisma.booking.create({
-            data: {
-                user_id: BigInt(userId),
-                package_id: BigInt(dto.package_id),
-                total_price: totalPrice,
-                deposit_due_date: dto.deposit_due_date
-                    ? new Date(dto.deposit_due_date)
-                    : undefined,
-                final_payment_due_date: dto.final_payment_due_date
-                    ? new Date(dto.final_payment_due_date)
-                    : undefined,
-                trip_end_date: dto.trip_end_date
-                    ? new Date(dto.trip_end_date)
-                    : undefined,
-                booking_participants: {
-                    create: dto.participants.map((p) => ({
-                        full_name: p.full_name,
-                        relation_type: p.relation_type,
-                        is_primary: p.is_primary ?? false,
-                        user_id: p.is_primary ? BigInt(userId) : undefined,
-                    })),
+        const depositAmount = totalPrice * payments_service_1.DEPOSIT_PERCENTAGE;
+        if (dto.payment.amount !== depositAmount) {
+            throw new common_1.BadRequestException(`مبلغ العربون غير صحيح. المطلوب: ${depositAmount}, تم إرسال: ${dto.payment.amount}`);
+        }
+        const result = await this.prisma.$transaction(async (tx) => {
+            const booking = await tx.booking.create({
+                data: {
+                    user_id: BigInt(userId),
+                    package_id: BigInt(dto.package_id),
+                    total_price: totalPrice,
+                    deposit_due_date: dto.deposit_due_date
+                        ? new Date(dto.deposit_due_date)
+                        : undefined,
+                    final_payment_due_date: dto.final_payment_due_date
+                        ? new Date(dto.final_payment_due_date)
+                        : undefined,
+                    trip_end_date: dto.trip_end_date
+                        ? new Date(dto.trip_end_date)
+                        : undefined,
+                    booking_participants: {
+                        create: dto.participants.map((p) => ({
+                            full_name: p.full_name,
+                            relation_type: p.relation_type,
+                            is_primary: p.is_primary ?? false,
+                            user_id: p.is_primary ? BigInt(userId) : undefined,
+                        })),
+                    },
                 },
-            },
-            include: {
-                booking_participants: true,
-                package: true,
-            },
+                include: {
+                    booking_participants: true,
+                    package: true,
+                },
+            });
+            return booking;
         });
-        return { ...booking, warnings };
+        try {
+            await this.paymentsService.createPayment({
+                bookingId: result.booking_id,
+                userId,
+                amount: depositAmount,
+                paymentType: enums_1.PaymentType.DEPOSIT,
+                paymentData: dto.payment,
+            });
+            await this.notificationsService.create({
+                userId,
+                type: 'PAYMENT_RECEIVED',
+                title: '💰 تم استلام دفعة العربون',
+                message: `تم استلام دفعة العربون (${this.formatCurrency(depositAmount)}) لحجزك "${result.package.package_title}". الحجز الآن قيد المراجعة من الإدارة.`,
+                relatedId: result.booking_id,
+                relatedType: 'booking',
+            });
+        }
+        catch (paymentError) {
+            await this.prisma.booking.delete({
+                where: { booking_id: result.booking_id },
+            });
+            throw paymentError;
+        }
+        return { ...result, warnings };
     }
     async findAll(filters) {
         const page = filters.page ?? 1;
@@ -157,6 +216,7 @@ let BookingsService = class BookingsService {
                             rejection_reason: true,
                         },
                     },
+                    payments: true,
                     _count: {
                         select: {
                             booking_participants: true,
@@ -193,6 +253,7 @@ let BookingsService = class BookingsService {
                         include: { passport: true, family_proof: true },
                     },
                     embassy_result: true,
+                    payments: true,
                     review: true,
                 },
                 orderBy: { created_at: 'desc' },
@@ -231,6 +292,7 @@ let BookingsService = class BookingsService {
                         },
                     },
                 },
+                payments: { orderBy: { paid_at: 'desc' } },
                 review: true,
             },
         });
@@ -306,6 +368,7 @@ let BookingsService = class BookingsService {
         const participants = booking.booking_participants || [];
         const docs = booking.family_proof_documents || [];
         const embassyResult = booking.embassy_result || null;
+        const payments = booking.payments || [];
         const passportsTotal = participants.length;
         const passportsUploaded = participants.filter((p) => p.passport).length;
         const passportsVerified = participants.filter((p) => p.passport?.verified_by_admin === true).length;
@@ -318,15 +381,26 @@ let BookingsService = class BookingsService {
         const docsApproved = docs.filter((d) => d.verification_status === 'APPROVED').length;
         const docsRejected = docs.filter((d) => d.verification_status === 'REJECTED').length;
         const docsPending = docs.filter((d) => d.verification_status === 'PENDING').length;
+        const totalPrice = Number(booking.total_price);
+        const depositAmount = totalPrice * payments_service_1.DEPOSIT_PERCENTAGE;
+        const finalAmount = totalPrice - depositAmount;
+        const depositPaid = payments.some((p) => p.payment_type === 'DEPOSIT' && p.payment_status === 'COMPLETED');
+        const finalPaid = payments.some((p) => p.payment_type === 'FINAL' && p.payment_status === 'COMPLETED');
+        const totalPaid = payments
+            .filter((p) => p.payment_status === 'COMPLETED')
+            .reduce((sum, p) => sum + Number(p.amount), 0);
         const allPassportsVerified = passportsTotal > 0 &&
             passportsUploaded === passportsTotal &&
             passportsVerified === passportsTotal;
         const allDocsApproved = docsTotal === 0 || (docsTotal > 0 && docsApproved === docsTotal);
         const canConfirmBooking = booking.booking_status === 'PENDING' &&
             allPassportsVerified &&
-            allDocsApproved;
+            allDocsApproved &&
+            depositPaid;
         const canCompleteBooking = booking.booking_status === 'CONFIRMED' &&
-            embassyResult?.embassy_status === 'APPROVED';
+            embassyResult?.embassy_status === 'APPROVED' &&
+            finalPaid;
+        const needsFinalPayment = booking.booking_status === 'CONFIRMED' && !finalPaid;
         const suggestions = [];
         if (passportsTotal > 0 && passportsRejected === passportsTotal) {
             suggestions.push('كل الجوازات مرفوضة، يُنصح برفض الحجز أو طلب جوازات جديدة من المستخدم');
@@ -354,16 +428,30 @@ let BookingsService = class BookingsService {
                     rejection_reason: embassyResult.rejection_reason,
                 }
                 : null,
+            payment: {
+                total_price: totalPrice,
+                deposit_amount: depositAmount,
+                final_amount: finalAmount,
+                total_paid: totalPaid,
+                remaining: totalPrice - totalPaid,
+                deposit_paid: depositPaid,
+                final_paid: finalPaid,
+                is_fully_paid: depositPaid && finalPaid,
+                needs_final_payment: needsFinalPayment,
+            },
             canConfirmBooking,
             canCompleteBooking,
             suggestions,
-            blockReasons: this.getBlockReasons(booking.booking_status, passportsTotal, passportsUploaded, passportsVerified, passportsPending, passportsRejected, docsTotal, docsPending, docsRejected),
+            blockReasons: this.getBlockReasons(booking.booking_status, passportsTotal, passportsUploaded, passportsVerified, passportsPending, passportsRejected, docsTotal, docsPending, docsRejected, depositPaid),
         };
     }
-    getBlockReasons(status, pTotal, pUploaded, pVerified, pPending, pRejected, dTotal, dPending, dRejected) {
+    getBlockReasons(status, pTotal, pUploaded, pVerified, pPending, pRejected, dTotal, dPending, dRejected, depositPaid) {
         if (status !== 'PENDING')
             return [];
         const reasons = [];
+        if (!depositPaid) {
+            reasons.push('العربون غير مدفوع');
+        }
         if (pTotal === 0) {
             reasons.push('لا يوجد مشاركون في الحجز');
         }
@@ -408,7 +496,7 @@ let BookingsService = class BookingsService {
             const workflow = booking.workflow;
             if (!workflow?.canConfirmBooking) {
                 throw new common_1.BadRequestException({
-                    message: 'لا يمكن قبول الحجز قبل اكتمال مراجعة الجوازات والوثائق',
+                    message: 'لا يمكن قبول الحجز قبل اكتمال مراجعة الجوازات والوثائق ودفع العربون',
                     reasons: workflow?.blockReasons || [],
                 });
             }
@@ -438,6 +526,16 @@ let BookingsService = class BookingsService {
                 type: 'BOOKING_CONFIRMED',
                 title: '✅ تم قبول حجزك',
                 message: `تم قبول حجزك للرحلة "${updated.package.package_title}". سيتم الآن إرسال البيانات للسفارة.`,
+                relatedId: updated.booking_id,
+                relatedType: 'booking',
+            });
+            const totalPrice = Number(booking.total_price);
+            const finalAmount = totalPrice * (1 - payments_service_1.DEPOSIT_PERCENTAGE);
+            await this.notificationsService.create({
+                userId: updated.user.user_id,
+                type: 'PAYMENT_REQUIRED',
+                title: '💳 مطلوب دفع المبلغ المتبقي',
+                message: `حجزك مقبول! يرجى دفع المبلغ المتبقي (${this.formatCurrency(finalAmount)}) لإكمال الحجز.`,
                 relatedId: updated.booking_id,
                 relatedType: 'booking',
             });
@@ -493,6 +591,11 @@ let BookingsService = class BookingsService {
             },
         });
     }
+    formatCurrency(amount) {
+        return new Intl.NumberFormat('ar-SY', {
+            maximumFractionDigits: 0,
+        }).format(amount) + ' ل.س';
+    }
     buildWhereClause(filters, search) {
         const where = {};
         if (filters.status) {
@@ -527,6 +630,7 @@ exports.BookingsService = BookingsService = __decorate([
     (0, common_1.Injectable)(),
     __metadata("design:paramtypes", [prisma_service_1.PrismaService,
         pdf_service_1.PdfService,
-        notifications_service_1.NotificationsService])
+        notifications_service_1.NotificationsService,
+        payments_service_1.PaymentsService])
 ], BookingsService);
 //# sourceMappingURL=bookings.service.js.map

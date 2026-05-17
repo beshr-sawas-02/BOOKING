@@ -15,12 +15,18 @@ const family_proof_controller_1 = require("./family-proof.controller");
 const upload_module_1 = require("../upload/upload.module");
 const pdf_module_1 = require("../pdf/pdf.module");
 const notifications_module_1 = require("../notifications/notifications.module");
+const payments_module_1 = require("../payments/payments.module");
 let BookingsModule = class BookingsModule {
 };
 exports.BookingsModule = BookingsModule;
 exports.BookingsModule = BookingsModule = __decorate([
     (0, common_1.Module)({
-        imports: [upload_module_1.UploadModule, pdf_module_1.PdfModule, notifications_module_1.NotificationsModule],
+        imports: [
+            upload_module_1.UploadModule,
+            pdf_module_1.PdfModule,
+            notifications_module_1.NotificationsModule,
+            payments_module_1.PaymentsModule,
+        ],
         controllers: [bookings_controller_1.BookingsController, family_proof_controller_1.FamilyProofController],
         providers: [bookings_service_1.BookingsService, family_proof_service_1.FamilyProofService],
         exports: [bookings_service_1.BookingsService],

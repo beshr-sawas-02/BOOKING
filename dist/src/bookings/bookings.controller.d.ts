@@ -112,6 +112,20 @@ export declare class BookingsController {
             is_primary: boolean;
             family_proof_id: bigint | null;
         })[];
+        payments: {
+            created_at: Date;
+            user_id: bigint;
+            booking_id: bigint;
+            payment_method: import(".prisma/client").$Enums.PaymentMethod;
+            card_holder_name: string | null;
+            amount: import("@prisma/client/runtime/library").Decimal;
+            payment_id: bigint;
+            payment_type: import(".prisma/client").$Enums.PaymentType;
+            payment_status: import(".prisma/client").$Enums.PaymentStatus;
+            card_last_4: string | null;
+            transaction_ref: string;
+            paid_at: Date;
+        }[];
         embassy_result: {
             updated_at: Date;
             embassy_status: import(".prisma/client").$Enums.EmbassyStatus;
@@ -145,6 +159,16 @@ export declare class BookingsController {
         rejection_reason: string | null;
         sent_to_embassy_at: Date | null;
     }>>;
+    calculateDeposit(packageId: number, participantsCount: number): Promise<{
+        package_id: string;
+        package_title: string;
+        price_per_person: number;
+        participants_count: number;
+        total_price: number;
+        deposit_percentage: number;
+        deposit_amount: number;
+        final_amount: number;
+    }>;
     findAll(query: BookingsFilterDto): Promise<import("../common/dto/pagination.dto").PaginatedResponse<any>>;
     findOne(id: number): Promise<{
         workflow: {
@@ -165,8 +189,19 @@ export declare class BookingsController {
                 status: any;
                 rejection_reason: any;
             } | null;
-            canConfirmBooking: boolean;
-            canCompleteBooking: boolean;
+            payment: {
+                total_price: number;
+                deposit_amount: number;
+                final_amount: number;
+                total_paid: any;
+                remaining: number;
+                deposit_paid: any;
+                final_paid: any;
+                is_fully_paid: any;
+                needs_final_payment: boolean;
+            };
+            canConfirmBooking: any;
+            canCompleteBooking: any;
             suggestions: string[];
             blockReasons: string[];
         };
@@ -286,6 +321,20 @@ export declare class BookingsController {
             mother_name: string | null;
             im_extracted: boolean;
         })[];
+        payments: {
+            created_at: Date;
+            user_id: bigint;
+            booking_id: bigint;
+            payment_method: import(".prisma/client").$Enums.PaymentMethod;
+            card_holder_name: string | null;
+            amount: import("@prisma/client/runtime/library").Decimal;
+            payment_id: bigint;
+            payment_type: import(".prisma/client").$Enums.PaymentType;
+            payment_status: import(".prisma/client").$Enums.PaymentStatus;
+            card_last_4: string | null;
+            transaction_ref: string;
+            paid_at: Date;
+        }[];
         embassy_result: {
             updated_at: Date;
             embassy_status: import(".prisma/client").$Enums.EmbassyStatus;

@@ -24,6 +24,7 @@ const upload_module_1 = require("./upload/upload.module");
 const ai_module_1 = require("./ai/ai.module");
 const pdf_module_1 = require("./pdf/pdf.module");
 const notifications_module_1 = require("./notifications/notifications.module");
+const payments_module_1 = require("./payments/payments.module");
 const all_exceptions_filter_1 = require("./common/filters/all-exceptions.filter");
 let AppModule = class AppModule {
 };
@@ -46,6 +47,7 @@ exports.AppModule = AppModule = __decorate([
             ai_module_1.AiModule,
             pdf_module_1.PdfModule,
             notifications_module_1.NotificationsModule,
+            payments_module_1.PaymentsModule,
         ],
         providers: [{ provide: core_1.APP_FILTER, useClass: all_exceptions_filter_1.AllExceptionsFilter }],
     })

@@ -48,6 +48,19 @@ export class BookingsController {
   }
 
   // ─────────────────────────────────────────────────────────
+  // ✨ جديد: حساب العربون قبل الإنشاء (لعرضه في شاشة الدفع)
+  // ─────────────────────────────────────────────────────────
+  @Get('calculate-deposit/:packageId/:participantsCount')
+  @UseGuards(RolesGuard)
+  @Roles('user')
+  calculateDeposit(
+    @Param('packageId', ParseIntPipe) packageId: number,
+    @Param('participantsCount', ParseIntPipe) participantsCount: number,
+  ) {
+    return this.bookingsService.calculateDeposit(packageId, participantsCount);
+  }
+
+  // ─────────────────────────────────────────────────────────
   // Admin endpoints
   // ─────────────────────────────────────────────────────────
 

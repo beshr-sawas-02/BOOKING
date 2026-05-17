@@ -1,4 +1,5 @@
 import { RelationType } from '../../common/enums';
+import { CreatePaymentDto } from '../../payments/dto/create-payment.dto';
 export declare class CreateParticipantDto {
     full_name: string;
     relation_type: RelationType;
@@ -14,4 +15,5 @@ export declare class CreateBookingDto {
     deposit_due_date?: string;
     final_payment_due_date?: string;
     trip_end_date?: string;
+    payment: CreatePaymentDto;
 }

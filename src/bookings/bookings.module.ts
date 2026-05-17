@@ -6,9 +6,15 @@ import { FamilyProofController } from './family-proof.controller';
 import { UploadModule } from '../upload/upload.module';
 import { PdfModule } from '../pdf/pdf.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { PaymentsModule } from '../payments/payments.module'; // ✨ جديد
 
 @Module({
-  imports: [UploadModule, PdfModule, NotificationsModule],
+  imports: [
+    UploadModule,
+    PdfModule,
+    NotificationsModule,
+    PaymentsModule, // ✨ جديد
+  ],
   controllers: [BookingsController, FamilyProofController],
   providers: [BookingsService, FamilyProofService],
   exports: [BookingsService],

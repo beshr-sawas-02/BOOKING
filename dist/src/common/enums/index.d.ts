@@ -1,1 +1,1 @@
-export { BookingStatus, EmbassyStatus, VerificationStatus, AdminRole, PackageType, Gender, RelationType, ImageType, } from '@prisma/client';
+export { BookingStatus, EmbassyStatus, VerificationStatus, AdminRole, PackageType, Gender, RelationType, ImageType, NotificationType, PaymentType, PaymentStatus, PaymentMethod, } from '@prisma/client';

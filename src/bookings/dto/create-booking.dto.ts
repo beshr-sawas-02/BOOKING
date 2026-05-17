@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { RelationType } from '../../common/enums';
+import { CreatePaymentDto } from '../../payments/dto/create-payment.dto'; // ✨ جديد
 
 export class CreateParticipantDto {
   @IsString()
@@ -22,12 +23,10 @@ export class CreateParticipantDto {
   @IsBoolean()
   is_primary?: boolean;
 
-  // Gender مطلوب للتحقق من المحارم
   @IsOptional()
   @IsString()
   gender?: string;
 
-  // تاريخ الميلاد للتحقق من شرط العمر
   @IsOptional()
   @IsDateString()
   date_of_birth?: string;
@@ -42,7 +41,6 @@ export class CreateBookingDto {
   @Type(() => CreateParticipantDto)
   participants!: CreateParticipantDto[];
 
-  // جنس صاحب الطلب — مطلوب للتحقق من القرابات
   @IsString()
   primary_gender!: string;
 
@@ -61,4 +59,9 @@ export class CreateBookingDto {
   @IsOptional()
   @IsString()
   trip_end_date?: string;
+
+  // ✨ جديد: بيانات دفع العربون (مطلوب لإنشاء الحجز)
+  @ValidateNested()
+  @Type(() => CreatePaymentDto)
+  payment!: CreatePaymentDto;
 }

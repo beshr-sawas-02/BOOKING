@@ -67,17 +67,41 @@ enum ImageType {
   BACK
 }
 
-// ✨ جديد - أنواع الإشعارات
+// ✨ معدّل - أُضيف PAYMENT_RECEIVED + PAYMENT_REQUIRED
 enum NotificationType {
-  BOOKING_CONFIRMED      // الأدمن قبل الحجز
-  BOOKING_REJECTED       // الأدمن رفض الحجز
-  EMBASSY_APPROVED       // السفارة قبلت
-  EMBASSY_REJECTED       // السفارة رفضت
-  PASSPORT_VERIFIED      // الجواز مراجَع
-  PASSPORT_REJECTED      // الجواز مرفوض
-  DOCUMENT_APPROVED      // الوثيقة العائلية مقبولة
-  DOCUMENT_REJECTED      // الوثيقة العائلية مرفوضة
-  GENERAL                // إشعار عام
+  BOOKING_CONFIRMED
+  BOOKING_REJECTED
+  EMBASSY_APPROVED
+  EMBASSY_REJECTED
+  PASSPORT_VERIFIED
+  PASSPORT_REJECTED
+  DOCUMENT_APPROVED
+  DOCUMENT_REJECTED
+  PAYMENT_RECEIVED        // ✨ جديد - تم استلام دفعة
+  PAYMENT_REQUIRED        // ✨ جديد - مطلوب دفع
+  GENERAL
+}
+
+// ✨ جديد - نوع الدفعة
+enum PaymentType {
+  DEPOSIT     // العربون (20%)
+  FINAL       // الدفعة النهائية (80%)
+  FULL        // دفع كامل (احتياطي)
+}
+
+// ✨ جديد - حالة الدفعة
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+// ✨ جديد - طريقة الدفع
+enum PaymentMethod {
+  VISA
+  MASTERCARD
+  CASH
 }
 
 model User {
@@ -96,7 +120,8 @@ model User {
   passports              Passport[]
   family_proof_documents FamilyProofDocument[]
   reviews                PackageReview[]
-  notifications          Notification[]   // ✨ جديد
+  notifications          Notification[]
+  payments               Payment[]   // ✨ جديد
 
   @@map("users")
 }
@@ -189,16 +214,17 @@ model Booking {
   deposit_due_date       DateTime?
   final_payment_due_date DateTime?
   trip_end_date          DateTime?     @db.Date
-  rejection_reason       String?       // ✨ جديد - سبب الرفض (من الأدمن أو السفارة)
-  sent_to_embassy_at     DateTime?     // ✨ جديد - وقت الإرسال للسفارة
+  rejection_reason       String?
+  sent_to_embassy_at     DateTime?
   created_at             DateTime      @default(now())
   updated_at             DateTime      @updatedAt
 
   user                   User                  @relation(fields: [user_id], references: [user_id])
   package                Package               @relation(fields: [package_id], references: [package_id])
   booking_participants   BookingParticipant[]
-  embassy_result         EmbassyResult?        // ✨ صار One-to-One بدل Many
+  embassy_result         EmbassyResult?
   family_proof_documents FamilyProofDocument[]
+  payments               Payment[]   // ✨ جديد
 
   review PackageReview?
 
@@ -264,14 +290,13 @@ model PassportImage {
   @@map("passport_images")
 }
 
-// ✨ معدّل - صار على مستوى الحجز (مش الجواز)
 model EmbassyResult {
   result_id        BigInt        @id @default(autoincrement())
-  booking_id       BigInt        @unique  // ✨ unique - حجز واحد = نتيجة واحدة
+  booking_id       BigInt        @unique
   embassy_status   EmbassyStatus @default(PENDING)
   notes            String?
   rejection_reason String?
-  matched_name     String?       // الاسم اللي طابقناه من الـ Excel
+  matched_name     String?
   uploaded_at      DateTime      @default(now())
   updated_at       DateTime      @updatedAt
 
@@ -318,7 +343,6 @@ model PackageReview {
   @@map("package_reviews")
 }
 
-// ✨ جديد - جدول الإشعارات
 model Notification {
   notification_id BigInt           @id @default(autoincrement())
   user_id         BigInt
@@ -326,8 +350,8 @@ model Notification {
   title           String
   message         String
   is_read         Boolean          @default(false)
-  related_id      BigInt?          // booking_id أو passport_id حسب النوع
-  related_type    String?          // "booking" | "passport" | "document"
+  related_id      BigInt?
+  related_type    String?
   created_at      DateTime         @default(now())
 
   user User @relation(fields: [user_id], references: [user_id], onDelete: Cascade)
@@ -335,4 +359,27 @@ model Notification {
   @@index([user_id, is_read])
   @@index([user_id, created_at])
   @@map("notifications")
+}
+
+// ✨ جديد - جدول الدفعات
+model Payment {
+  payment_id        BigInt         @id @default(autoincrement())
+  booking_id        BigInt
+  user_id           BigInt
+  amount            Decimal        @db.Decimal(12, 2)
+  payment_type      PaymentType
+  payment_status    PaymentStatus  @default(COMPLETED)
+  payment_method    PaymentMethod
+  card_last_4       String?        // آخر 4 أرقام (أمان - ما نخزن الرقم كامل)
+  card_holder_name  String?
+  transaction_ref   String         @unique   // مرجع المعاملة الوهمي (TXN-XXX-YYY)
+  paid_at           DateTime       @default(now())
+  created_at        DateTime       @default(now())
+
+  booking Booking @relation(fields: [booking_id], references: [booking_id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [user_id])
+
+  @@index([booking_id])
+  @@index([user_id])
+  @@map("payments")
 }

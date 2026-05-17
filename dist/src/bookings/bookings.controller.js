@@ -33,6 +33,9 @@ let BookingsController = class BookingsController {
     myBookings(user, query) {
         return this.bookingsService.findMyBookings(Number(user.user_id), query);
     }
+    calculateDeposit(packageId, participantsCount) {
+        return this.bookingsService.calculateDeposit(packageId, participantsCount);
+    }
     findAll(query) {
         return this.bookingsService.findAll(query);
     }
@@ -81,6 +84,16 @@ __decorate([
     __metadata("design:paramtypes", [Object, bookings_filter_dto_1.BookingsFilterDto]),
     __metadata("design:returntype", void 0)
 ], BookingsController.prototype, "myBookings", null);
+__decorate([
+    (0, common_1.Get)('calculate-deposit/:packageId/:participantsCount'),
+    (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
+    (0, roles_decorator_1.Roles)('user'),
+    __param(0, (0, common_1.Param)('packageId', common_1.ParseIntPipe)),
+    __param(1, (0, common_1.Param)('participantsCount', common_1.ParseIntPipe)),
+    __metadata("design:type", Function),
+    __metadata("design:paramtypes", [Number, Number]),
+    __metadata("design:returntype", void 0)
+], BookingsController.prototype, "calculateDeposit", null);
 __decorate([
     (0, common_1.Get)(),
     (0, common_1.UseGuards)(roles_guard_1.RolesGuard),
