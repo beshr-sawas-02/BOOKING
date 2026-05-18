@@ -13,6 +13,12 @@ export interface PassportExtraction {
   expiry_date?: string;
   confidence: number;
   needs_review?: boolean;
+
+  // ✨ جديد: حقول الرفض
+  rejected?: boolean;
+  rejection_code?: string;
+  rejection_message?: string;
+  debug?: Record<string, any>;
 }
 
 export interface DocumentExtraction {
@@ -28,14 +34,8 @@ export class AiService {
   private readonly pythonServiceUrl =
     process.env.AI_SERVICE_URL || 'http://localhost:5000';
   private readonly apiKey = process.env.OCR_API_KEY || '';
-  private readonly timeoutMs = 180000; // دقيقة واحدة
+  private readonly timeoutMs = 180000;
 
-  /**
-   * استخراج بيانات جواز السفر من URL للصورة
-   * @param imageUrl رابط الصورة (Cloudinary, S3, إلخ)
-   * @returns البيانات المستخرجة مع درجة ثقة (0-1)
-   * @throws يُرجع { confidence: 0 } عند أي فشل بدلاً من رمي خطأ
-   */
   async extractPassportData(imageUrl: string): Promise<PassportExtraction> {
     try {
       this.logger.log(`Calling Python AI service for: ${imageUrl}`);
@@ -43,6 +43,14 @@ export class AiService {
         '/extract-passport',
         { image_url: imageUrl },
       );
+
+      // ✨ لو الصورة مرفوضة، نرجع كما هي
+      if (result?.rejected) {
+        this.logger.warn(
+          `Passport REJECTED: ${result.rejection_code} - ${result.rejection_message}`,
+        );
+        return result;
+      }
 
       if (!result || result.confidence === 0) {
         this.logger.warn('Python service returned confidence 0');
@@ -57,11 +65,6 @@ export class AiService {
     }
   }
 
-  /**
-   * استخراج بيانات من وثيقة عائلية (اسم الأب، الأم، إلخ)
-   * @param imageUrl رابط الصورة
-   * @returns البيانات المستخرجة مع درجة ثقة
-   */
   async extractFamilyDocument(imageUrl: string): Promise<DocumentExtraction> {
     try {
       const result = await this.callPythonService<DocumentExtraction>(
@@ -76,14 +79,6 @@ export class AiService {
     }
   }
 
-  /**
-   * استدعاء HTTP للـ Python OCR service
-   * @param endpoint المسار (مثل '/extract-passport')
-   * @param body محتوى الطلب كـ JSON
-   * @returns استجابة الخدمة بالنوع المحدد
-   * @throws Error إذا فشل الاتصال أو timeout
-   * @throws Error إذا كانت الاستجابة JSON غير صحيح
-   */
   private callPythonService<T>(endpoint: string, body: object): Promise<T> {
     return new Promise((resolve, reject) => {
       const bodyStr = JSON.stringify(body);
@@ -91,7 +86,6 @@ export class AiService {
       const isHttps = urlObj.protocol === 'https:';
       const lib = isHttps ? https : http;
 
-      // إعداد headers مع API key إذا كان متوفر
       const headers: Record<string, string | number> = {
         'Content-Type': 'application/json',
         'Content-Length': Buffer.byteLength(bodyStr),

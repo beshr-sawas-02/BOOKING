@@ -53,6 +53,10 @@ let AiService = AiService_1 = class AiService {
         try {
             this.logger.log(`Calling Python AI service for: ${imageUrl}`);
             const result = await this.callPythonService('/extract-passport', { image_url: imageUrl });
+            if (result?.rejected) {
+                this.logger.warn(`Passport REJECTED: ${result.rejection_code} - ${result.rejection_message}`);
+                return result;
+            }
             if (!result || result.confidence === 0) {
                 this.logger.warn('Python service returned confidence 0');
                 return { confidence: 0 };

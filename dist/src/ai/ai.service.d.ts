@@ -9,6 +9,10 @@ export interface PassportExtraction {
     expiry_date?: string;
     confidence: number;
     needs_review?: boolean;
+    rejected?: boolean;
+    rejection_code?: string;
+    rejection_message?: string;
+    debug?: Record<string, any>;
 }
 export interface DocumentExtraction {
     father_name?: string;

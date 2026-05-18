@@ -406,7 +406,7 @@ export declare class PassportsService {
         };
         message: string;
     }>;
-    private runAiExtraction;
+    private applyAiExtraction;
     verifyPassport(id: number, dto: VerifyPassportDto): Promise<{
         passport_images: {
             passport_id: bigint;

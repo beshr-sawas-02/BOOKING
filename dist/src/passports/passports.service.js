@@ -71,6 +71,13 @@ let PassportsService = class PassportsService {
         }
         const url = await this.cloudinary.uploadFile(file, 'passports/preview');
         const extracted = await this.aiService.extractPassportData(url);
+        if (extracted.rejected) {
+            throw new common_1.BadRequestException({
+                message: extracted.rejection_message || 'الصورة المرفوعة غير صالحة',
+                rejection_code: extracted.rejection_code,
+                is_passport_rejection: true,
+            });
+        }
         return {
             image_url: url,
             confidence: extracted.confidence,
@@ -162,12 +169,7 @@ let PassportsService = class PassportsService {
                 where: { rejection_reason: { not: null } },
             }),
         ]);
-        return {
-            total,
-            verified,
-            pending,
-            rejected,
-        };
+        return { total, verified, pending, rejected };
     }
     async findByBooking(bookingId) {
         return this.prisma.passport.findMany({
@@ -209,6 +211,35 @@ let PassportsService = class PassportsService {
         if (!isAdmin && passport.user_id.toString() !== userId.toString())
             throw new common_1.ForbiddenException('Access denied');
         const url = await this.cloudinary.uploadFile(file, 'passports');
+        if (imageType === enums_1.ImageType.FRONT) {
+            const extracted = await this.aiService.extractPassportData(url);
+            if (extracted.rejected) {
+                throw new common_1.BadRequestException({
+                    message: extracted.rejection_message || 'الصورة المرفوعة غير صالحة',
+                    rejection_code: extracted.rejection_code,
+                    is_passport_rejection: true,
+                });
+            }
+            await this.prisma.passportImage.deleteMany({
+                where: { passport_id: BigInt(passportId), image_type: imageType },
+            });
+            const image = await this.prisma.passportImage.create({
+                data: {
+                    passport_id: BigInt(passportId),
+                    image_url: url,
+                    image_type: imageType,
+                },
+            });
+            if (extracted.confidence > 0) {
+                await this.applyAiExtraction(passportId, extracted);
+            }
+            const updatedPassport = await this.findOne(passportId);
+            return {
+                image,
+                passport: updatedPassport,
+                message: 'تم رفع الصورة بنجاح وتحليلها',
+            };
+        }
         await this.prisma.passportImage.deleteMany({
             where: { passport_id: BigInt(passportId), image_type: imageType },
         });
@@ -219,27 +250,14 @@ let PassportsService = class PassportsService {
                 image_type: imageType,
             },
         });
-        if (imageType === enums_1.ImageType.FRONT) {
-            try {
-                await this.runAiExtraction(passportId, url);
-            }
-            catch (err) {
-                console.error('AI extraction error:', err);
-            }
-        }
         const updatedPassport = await this.findOne(passportId);
         return {
             image,
             passport: updatedPassport,
-            message: 'تم رفع الصورة بنجاح وتحليلها',
+            message: 'تم رفع الصورة بنجاح',
         };
     }
-    async runAiExtraction(passportId, imageUrl) {
-        const extracted = await this.aiService.extractPassportData(imageUrl);
-        if (extracted.confidence === 0) {
-            console.warn(`[OCR] Failed to extract passport ${passportId} — confidence 0, skipping save`);
-            return;
-        }
+    async applyAiExtraction(passportId, extracted) {
         const updateData = {
             ai_extracted: true,
             extraction_confidence: extracted.confidence,

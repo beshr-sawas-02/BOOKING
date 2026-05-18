@@ -76,7 +76,7 @@ export class PassportsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // معاينة OCR بدون حفظ
+  // ✨ معدّل: معاينة OCR + رفض الصور غير الصالحة
   // ─────────────────────────────────────────────────────────
   async previewOcr(file: MulterFile) {
     if (!file) {
@@ -85,6 +85,15 @@ export class PassportsService {
 
     const url = await this.cloudinary.uploadFile(file, 'passports/preview');
     const extracted = await this.aiService.extractPassportData(url);
+
+    // ✨ جديد: إذا الصورة مرفوضة، نرمي BadRequestException مع رسالة عربية
+    if (extracted.rejected) {
+      throw new BadRequestException({
+        message: extracted.rejection_message || 'الصورة المرفوعة غير صالحة',
+        rejection_code: extracted.rejection_code,
+        is_passport_rejection: true, // علم نميز فيه نوع الخطأ
+      });
+    }
 
     return {
       image_url: url,
@@ -104,7 +113,7 @@ export class PassportsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // قائمة كل الجوازات للأدمن — مع pagination + filters
+  // قائمة كل الجوازات للأدمن
   // ─────────────────────────────────────────────────────────
   async findAll(filters: PassportsFilterDto) {
     const page = filters.page ?? 1;
@@ -144,9 +153,6 @@ export class PassportsService {
     return buildPaginatedResponse(passports, total, page, limit);
   }
 
-  // ─────────────────────────────────────────────────────────
-  // جوازات تنتظر المراجعة
-  // ─────────────────────────────────────────────────────────
   async findPendingVerification(filters: PassportsFilterDto) {
     const page = filters.page ?? 1;
     const limit = filters.limit ?? 10;
@@ -182,9 +188,6 @@ export class PassportsService {
     return buildPaginatedResponse(passports, total, page, limit);
   }
 
-  // ─────────────────────────────────────────────────────────
-  // إحصائيات الجوازات للـ dashboard
-  // ─────────────────────────────────────────────────────────
   async getStats() {
     const [total, verified, pending, rejected] = await Promise.all([
       this.prisma.passport.count(),
@@ -197,12 +200,7 @@ export class PassportsService {
       }),
     ]);
 
-    return {
-      total,
-      verified,
-      pending,
-      rejected,
-    };
+    return { total, verified, pending, rejected };
   }
 
   async findByBooking(bookingId: number) {
@@ -212,9 +210,6 @@ export class PassportsService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────
-  // ✨ معدّل: السفارة من خلال الـ booking (one-to-one)
-  // ─────────────────────────────────────────────────────────
   async findOne(id: number) {
     const passport = await this.prisma.passport.findUnique({
       where: { passport_id: BigInt(id) },
@@ -245,7 +240,7 @@ export class PassportsService {
   }
 
   // ─────────────────────────────────────────────────────────
-  // رفع صورة الجواز + استدعاء AI تلقائياً
+  // ✨ معدّل: رفع صورة جواز موجود + رفض غير الصالحة
   // ─────────────────────────────────────────────────────────
   async uploadImage(
     passportId: number,
@@ -260,6 +255,47 @@ export class PassportsService {
 
     const url = await this.cloudinary.uploadFile(file, 'passports');
 
+    // ✨ جديد: إذا الصورة front، نتحقق منها قبل ما نحفظها
+    if (imageType === ImageType.FRONT) {
+      const extracted = await this.aiService.extractPassportData(url);
+
+      if (extracted.rejected) {
+        // ما نحفظ الصورة لو مرفوضة
+        throw new BadRequestException({
+          message:
+            extracted.rejection_message || 'الصورة المرفوعة غير صالحة',
+          rejection_code: extracted.rejection_code,
+          is_passport_rejection: true,
+        });
+      }
+
+      // الصورة قُبلت، احذف الصورة القديمة وأنشئ الجديدة
+      await this.prisma.passportImage.deleteMany({
+        where: { passport_id: BigInt(passportId), image_type: imageType },
+      });
+
+      const image = await this.prisma.passportImage.create({
+        data: {
+          passport_id: BigInt(passportId),
+          image_url: url,
+          image_type: imageType,
+        },
+      });
+
+      // طبّق البيانات المستخرجة على الجواز
+      if (extracted.confidence > 0) {
+        await this.applyAiExtraction(passportId, extracted);
+      }
+
+      const updatedPassport = await this.findOne(passportId);
+      return {
+        image,
+        passport: updatedPassport,
+        message: 'تم رفع الصورة بنجاح وتحليلها',
+      };
+    }
+
+    // صور أخرى (BACK) — مش بحاجة تحقق صارم
     await this.prisma.passportImage.deleteMany({
       where: { passport_id: BigInt(passportId), image_type: imageType },
     });
@@ -272,32 +308,16 @@ export class PassportsService {
       },
     });
 
-    if (imageType === ImageType.FRONT) {
-      try {
-        await this.runAiExtraction(passportId, url);
-      } catch (err) {
-        console.error('AI extraction error:', err);
-      }
-    }
-
     const updatedPassport = await this.findOne(passportId);
     return {
       image,
       passport: updatedPassport,
-      message: 'تم رفع الصورة بنجاح وتحليلها',
+      message: 'تم رفع الصورة بنجاح',
     };
   }
 
-  private async runAiExtraction(passportId: number, imageUrl: string) {
-    const extracted = await this.aiService.extractPassportData(imageUrl);
-
-    if (extracted.confidence === 0) {
-      console.warn(
-        `[OCR] Failed to extract passport ${passportId} — confidence 0, skipping save`,
-      );
-      return;
-    }
-
+  // ✨ منفصلة عشان نستخدمها في uploadImage مباشرة
+  private async applyAiExtraction(passportId: number, extracted: any) {
     const updateData: Prisma.PassportUpdateInput = {
       ai_extracted: true,
       extraction_confidence: extracted.confidence,
@@ -324,9 +344,6 @@ export class PassportsService {
     });
   }
 
-  // ─────────────────────────────────────────────────────────
-  // مراجعة الجواز — قبول أو رفض مع سبب
-  // ─────────────────────────────────────────────────────────
   async verifyPassport(id: number, dto: VerifyPassportDto) {
     await this.findOne(id);
 
@@ -396,10 +413,6 @@ export class PassportsService {
       },
     });
   }
-
-  // ─────────────────────────────────────────────────────────
-  // Private helpers
-  // ─────────────────────────────────────────────────────────
 
   private buildWhereClause(
     filters: PassportsFilterDto,

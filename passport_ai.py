@@ -1,6 +1,7 @@
 """
 Passport OCR Service - Final Version for Syrian Passport
 يصلح مشاكل OCR في MRZ ويدمج الأسطر المكسورة
+✨ مع التحقق الصارم من أن الصورة جواز سفر سوري حصراً
 """
 
 from flask import Flask, request, jsonify
@@ -20,6 +21,18 @@ print("✅ EasyOCR ready")
 print("🤖 Passport OCR Service")
 print("📍 http://localhost:5000/health")
 print("📍 POST http://localhost:5000/extract-passport")
+
+
+# ═══════════════════════════════════════════════════════════
+# ✨ رسائل الرفض بالعربي
+# ═══════════════════════════════════════════════════════════
+REJECTION_MESSAGES = {
+    'NOT_PASSPORT': 'الصورة المرفوعة ليست جواز سفر. يرجى رفع صورة جواز سفر واضحة.',
+    'INVALID_PASSPORT': 'الصورة لا تحتوي على بيانات جواز سفر كاملة. تأكد من ظهور الشريط السفلي (MRZ) بوضوح.',
+    'NOT_SYRIAN': 'يجب أن يكون جواز السفر سورياً حصراً. تم اكتشاف جنسية مختلفة.',
+    'POOR_QUALITY': 'جودة الصورة منخفضة. التقط صورة أوضح بإضاءة جيدة.',
+    'NO_MRZ': 'الشريط السفلي (MRZ) غير مرئي. تأكد من ظهور السطرين السفليين كاملاً.',
+}
 
 
 def check_api_key():
@@ -50,13 +63,9 @@ def fix_mrz_letters(text: str) -> str:
 
 
 def normalize_mrz_chars(text: str) -> str:
-    """
-    تصحيح أخطاء OCR الشائعة في MRZ قبل التنظيف.
-    مثلاً $ → S، | → I، { → < ، إلخ.
-    """
     return (text
-            .replace('$', 'S')   # OCR يقرأ S كـ $
-            .replace('|', 'I')   # | يصير I
+            .replace('$', 'S')
+            .replace('|', 'I')
             .replace('!', 'I')
             .replace('{', '<').replace('}', '<')
             .replace('[', '<').replace(']', '<')
@@ -64,27 +73,18 @@ def normalize_mrz_chars(text: str) -> str:
 
 
 def clean_mrz_line(text: str) -> str:
-    """تنظيف سطر MRZ مع تطبيق normalization أولاً"""
     normalized = normalize_mrz_chars(text)
     return re.sub(r'[^A-Z0-9<]', '', normalized.upper())
 
 
 def merge_mrz_fragments(items: list) -> list:
-    """
-    EasyOCR قد يكسر سطر MRZ لقطعتين أو أكثر.
-    ندمج البلوكات يلي بنفس الصف العمودي ضمن مسافة معقولة.
-    Returns: قائمة من النصوص المدموجة (إضافة للنصوص الأصلية).
-    """
     if not items:
         return []
 
-    # نفلتر الـ items يلي ممكن تكون MRZ (تحتوي على < أو على نمط MRZ)
     mrz_candidates = []
     for it in items:
         text = it['text']
-        # نطبّق normalization عشان نشوف لو فيه < بعد التنظيف
         cleaned = clean_mrz_line(text)
-        # شرط: يحتوي على < أو يبدأ بـ P< أو يطابق نمط MRZ السطر الثاني
         has_chevron = '<' in cleaned
         looks_like_line2 = bool(re.match(r'^[A-Z0-9]{6,}', cleaned)) and len(cleaned) >= 15
         if has_chevron or (looks_like_line2 and any(c.isdigit() for c in cleaned)):
@@ -99,13 +99,11 @@ def merge_mrz_fragments(items: list) -> list:
     if not mrz_candidates:
         return []
 
-    # نجمعهن حسب الصف (المسافة العمودية)
-    # نرتبهن بالـ cy
     mrz_candidates.sort(key=lambda c: c['cy'])
 
     rows = []
     current_row = [mrz_candidates[0]]
-    ROW_TOLERANCE = 25  # pixels
+    ROW_TOLERANCE = 25
 
     for c in mrz_candidates[1:]:
         if abs(c['cy'] - current_row[0]['cy']) <= ROW_TOLERANCE:
@@ -115,7 +113,6 @@ def merge_mrz_fragments(items: list) -> list:
             current_row = [c]
     rows.append(current_row)
 
-    # ندمج كل صف من اليسار لليمين (بـ cx)
     merged_lines = []
     for row in rows:
         row.sort(key=lambda c: c['cx'])
@@ -127,7 +124,6 @@ def merge_mrz_fragments(items: list) -> list:
 
 
 def parse_mrz_lines(mrz_lines: list) -> dict:
-    """parse السطرين من MRZ"""
     result = {}
     current_year_short = datetime.now().year % 100
     max_expiry_year = datetime.now().year + 20
@@ -139,17 +135,13 @@ def parse_mrz_lines(mrz_lines: list) -> dict:
         if not clean:
             continue
 
-        # السطر الأول: P<CCCNAME<<GIVEN
         if line1 is None and clean.startswith('P') and '<<' in clean:
             line1 = clean
             print(f"  [MRZ] line1: {clean}")
             continue
 
-        # السطر الثاني: 9 رمز جواز + check + nationality + dates
-        # نقبل السطر لو فيه على الأقل 30 حرف ومش يبدأ بـ P<
         if line2 is None and len(clean) >= 30:
             if not (clean.startswith('P') and '<<' in clean[:10]):
-                # التأكد من النمط: يبدأ بحروف/أرقام (passport number)
                 if re.match(r'^[A-Z0-9<]{6,}', clean):
                     line2 = clean
                     print(f"  [MRZ] line2: {clean}")
@@ -160,16 +152,13 @@ def parse_mrz_lines(mrz_lines: list) -> dict:
     if not line2:
         print("  [MRZ] ⚠ line2 NOT FOUND")
 
-    # ── parse السطر الأول ──
     if line1:
         try:
-            # nationality من positions [2:5]
             nat_raw = line1[2:5]
             nat = fix_mrz_letters(nat_raw)
             if nat.isalpha() and len(nat) == 3:
                 result['nationality'] = nat
 
-            # الاسم: من position 5 لآخر السطر
             name_section = line1[5:44] if len(line1) >= 44 else line1[5:]
             parts = name_section.split('<<')
             if len(parts) >= 2:
@@ -185,10 +174,8 @@ def parse_mrz_lines(mrz_lines: list) -> dict:
         except Exception as e:
             print(f"  MRZ line1 parse error: {e}")
 
-    # ── parse السطر الثاني ──
     if line2:
         try:
-            # passport number: positions [0:9]
             pno_raw = line2[0:9].rstrip('<')
             if pno_raw and len(pno_raw) >= 5:
                 m = re.match(r'^([A-Z]{1,2})([A-Z0-9]+)$', pno_raw)
@@ -200,13 +187,11 @@ def parse_mrz_lines(mrz_lines: list) -> dict:
                     pno = pno_raw
                 result['passport_number'] = pno
 
-            # nationality من positions [10:13]
             nat2_raw = line2[10:13] if len(line2) >= 13 else ''
             nat2 = fix_mrz_letters(nat2_raw).rstrip('<')
             if nat2.isalpha() and len(nat2) == 3:
                 result['nationality'] = nat2
 
-            # DOB من positions [13:19]
             if len(line2) >= 19:
                 dob_raw = line2[13:19]
                 dob = fix_mrz_digits(dob_raw)
@@ -216,22 +201,15 @@ def parse_mrz_lines(mrz_lines: list) -> dict:
                     if 1900 <= yr <= datetime.now().year and 1 <= mm <= 12 and 1 <= dd <= 31:
                         result['date_of_birth'] = f"{yr}-{mm:02d}-{dd:02d}"
 
-            # Sex من position [20]
             if len(line2) > 20:
                 g = line2[20]
                 if g == 'M':
                     result['gender'] = 'MALE'
-                    print(f"  [MRZ] gender: MALE")
                 elif g == 'F':
                     result['gender'] = 'FEMALE'
-                    print(f"  [MRZ] gender: FEMALE")
 
-            # Expiry من positions [21:27]
-            # نستخدم regex match لمعالجة حالات OCR errors في filler position
-            # (مثلاً | بدل < قد يجعل position 20 ينزاح)
             if len(line2) >= 21:
                 remainder = line2[21:]
-                # نأخذ أول 6 أرقام متتابعة بعد أي حروف/رموز
                 m = re.match(r'[A-Z<]*([0-9]{6})', remainder)
                 if m:
                     exp = m.group(1)
@@ -247,11 +225,6 @@ def parse_mrz_lines(mrz_lines: list) -> dict:
 
 
 def parse_visual_zone_for_name(items: list) -> str | None:
-    """
-    fallback لاستخراج الاسم من المنطقة المرئية.
-    نستخدم fuzzy match للـ labels (Name, Surname) لأن OCR ممكن يقرأهن غلط
-    (Nafe بدل Name, Sumame بدل Surname).
-    """
     name_val = None
     surname_val = None
 
@@ -259,38 +232,30 @@ def parse_visual_zone_for_name(items: list) -> str | None:
         text = it['text'].strip()
         text_lower = text.lower()
 
-        # fuzzy match لـ "Name" — نقبل تشابه كبير
-        # Name, Nafe, Narne, Naine — كلهن يبدؤوا بـ N والطول 3-5
         is_name_label = bool(
             re.fullmatch(r'n[a-z]{2,4}', text_lower)
-        ) and not text_lower.startswith(('nat', 'no'))  # نتجاوز "national", "no"
+        ) and not text_lower.startswith(('nat', 'no'))
 
-        # fuzzy match لـ "Surname" — يبدأ بـ S والطول 6-8 ويحتوي m
         is_surname_label = bool(
-            re.fullmatch(r's[a-z]{0,2}m[a-z]+', text_lower)  # surname, sumame, surrname
+            re.fullmatch(r's[a-z]{0,2}m[a-z]+', text_lower)
         ) or text_lower in ('surname', 'sumame', 'sumarne')
 
-        # Father Name و Mother Name نتجاوزهن
         if 'father' in text_lower or 'mother' in text_lower:
             continue
 
         if is_name_label:
-            print(f"  [VISUAL NAME] ✓ Name label at #{i}: {repr(text)}")
             val = find_value_to_right(items, i)
             if val:
                 v_clean = val.upper().strip()
                 if re.fullmatch(r'[A-Z][A-Z\s\-]{1,30}', v_clean):
                     name_val = v_clean
-                    print(f"  [VISUAL NAME]   → name: {name_val}")
 
         elif is_surname_label:
-            print(f"  [VISUAL NAME] ✓ Surname label at #{i}: {repr(text)}")
             val = find_value_to_right(items, i)
             if val:
                 v_clean = val.upper().strip()
                 if re.fullmatch(r'[A-Z][A-Z\s\-]{1,30}', v_clean):
                     surname_val = v_clean
-                    print(f"  [VISUAL NAME]   → surname: {surname_val}")
 
     if name_val and surname_val:
         return f"{name_val} {surname_val}"
@@ -302,7 +267,6 @@ def parse_visual_zone_for_name(items: list) -> str | None:
 
 
 def find_value_to_right(items: list, label_idx: int) -> str | None:
-    """تجد القيمة على يمين label معيّن وبنفس الصف"""
     label = items[label_idx]
     label_h = abs(label['y2'] - label['y1'])
     if label_h < 10:
@@ -314,14 +278,11 @@ def find_value_to_right(items: list, label_idx: int) -> str | None:
     for i, other in enumerate(items):
         if i == label_idx:
             continue
-        # نفس الصف
         if abs(other['cy'] - label['cy']) > label_h * 1.2:
             continue
-        # على اليمين
         dx = other['cx'] - label['cx']
         if dx <= 0:
             continue
-        # يكون أقرب
         if dx < best_dx:
             best_dx = dx
             best = other['text']
@@ -351,35 +312,27 @@ def parse_visual_zone(ocr_results: list, mrz: dict) -> dict:
     full_text = '\n'.join(it['text'] for it in items)
     upper_text = full_text.upper()
 
-    # ── Passport number fallback ──
     if 'passport_number' not in result:
         m = re.search(r'\b([A-Z]{1,2}[0-9]{6,8})\b', upper_text)
         if m:
             result['passport_number'] = m.group(1)
 
-    # ── Nationality fallback ──
     if 'nationality' not in result:
         if re.search(r'\bSYR\b', upper_text):
             result['nationality'] = 'SYR'
         elif 'SYRIAN' in upper_text or 'SYRIA' in upper_text:
             result['nationality'] = 'SYR'
 
-    # ── Name fallback (إذا MRZ ما طلّع اسم) ──
     if 'full_name_en' not in result:
         name = parse_visual_zone_for_name(items)
         if name:
             result['full_name_en'] = name
 
-    # ── Gender fallback (إذا MRZ ما طلّع جنس) ──
-    # في الجواز السوري الجديد، Sex M أو Sex F ممكن OCR ما يقراها
-    # نقدر نشوف لو في "M" أو "F" منفرد قريب من كلمة "Sex" أو ما شابه
     if 'gender' not in result:
         for it in items:
             val = it['text'].strip().upper()
             if val in ('M', 'F'):
-                # نتأكد ما هي حرف من كلمة، لازم تكون لحالها
                 result['gender'] = 'MALE' if val == 'M' else 'FEMALE'
-                print(f"  [VISUAL SEX] found standalone: {val}")
                 break
         if 'gender' not in result:
             if re.search(r'\bMALE\b', upper_text):
@@ -387,7 +340,6 @@ def parse_visual_zone(ocr_results: list, mrz: dict) -> dict:
             elif re.search(r'\bFEMALE\b', upper_text):
                 result['gender'] = 'FEMALE'
 
-    # ── Dates مرتبطة بـ labels ──
     date_assignments = associate_dates_with_labels(items)
 
     if 'date_of_birth' in date_assignments and 'date_of_birth' not in result:
@@ -403,7 +355,6 @@ def parse_visual_zone(ocr_results: list, mrz: dict) -> dict:
 
 
 def associate_dates_with_labels(items: list) -> dict:
-    """ربط كل تاريخ بأقرب label له"""
     date_pattern = re.compile(r'(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})')
     dates_found = []
     for it in items:
@@ -505,6 +456,93 @@ def build_items(ocr_results: list) -> list:
     return items
 
 
+# ═══════════════════════════════════════════════════════════
+# ✨ جديد: التحقق الصارم من جواز السفر السوري
+# ═══════════════════════════════════════════════════════════
+def validate_syrian_passport(ocr_results: list, mrz_lines: list, mrz_data: dict, visual_data: dict) -> tuple:
+    """
+    تحقق صارم متعدد الطبقات إن الصورة جواز سفر سوري.
+    
+    Returns:
+        (is_valid: bool, rejection_code: str, debug_info: dict)
+    """
+    debug = {
+        'has_passport_word': False,
+        'has_mrz_p_line': False,
+        'has_mrz_line2': False,
+        'nationality': None,
+        'has_passport_number': False,
+        'text_blocks_count': len(ocr_results),
+    }
+    
+    # ── 1. جمع كل النصوص لتحليلها ──
+    all_texts = [r[1].strip() for r in ocr_results]
+    full_text_upper = ' '.join(all_texts).upper()
+    
+    # ── 2. شرط: هل في كلمة "PASSPORT" أو "جواز" ─
+    passport_keywords = ['PASSPORT', 'جواز', 'سفر', 'PASS PORT']
+    debug['has_passport_word'] = any(
+        kw in full_text_upper or kw in ' '.join(all_texts)
+        for kw in passport_keywords
+    )
+    
+    # ── 3. شرط: هل في MRZ صحيح؟ ─
+    # ✨ معدّل: نقبل P< أو PN أو PD أو PS (المعيار الدولي ICAO 9303)
+    # الجواز السوري يستخدم PN (Passport National)
+    debug['has_mrz_p_line'] = any(
+        len(line) >= 30 and re.match(r'^P[A-Z<]', line)
+        for line in mrz_lines
+    )
+    
+    # السطر الثاني لازم يكون 30+ حرف
+    debug['has_mrz_line2'] = any(
+        len(line) >= 30 and re.match(r'^[A-Z0-9<]{30,}', line)
+        for line in mrz_lines
+    )
+    
+    # ── 4. هل في رقم جواز؟ ──
+    debug['has_passport_number'] = bool(
+        mrz_data.get('passport_number') or visual_data.get('passport_number')
+    )
+    
+    # ── 5. الجنسية ──
+    debug['nationality'] = mrz_data.get('nationality') or visual_data.get('nationality')
+    
+    # ── 6. كم عدد text blocks (لو قليل جداً يعني صورة سيئة) ──
+    if debug['text_blocks_count'] < 5:
+        return False, 'POOR_QUALITY', debug
+    
+    # ═══════════════════════════════════════
+    # القرار النهائي
+    # ═══════════════════════════════════════
+    
+    # شرط حاسم 1: لازم في كلمة "passport/جواز" أو MRZ
+    if not debug['has_passport_word'] and not debug['has_mrz_p_line']:
+        return False, 'NOT_PASSPORT', debug
+    
+    # شرط حاسم 2: لازم MRZ موجود (السطر الأول على الأقل)
+    if not debug['has_mrz_p_line']:
+        return False, 'NO_MRZ', debug
+    
+    # شرط حاسم 3: لازم رقم جواز
+    if not debug['has_passport_number']:
+        return False, 'INVALID_PASSPORT', debug
+    
+    # شرط حاسم 4: لازم الجنسية SYR
+    if not debug['nationality']:
+        # ما عرفنا الجنسية → نشوف في النص "SYR" أو "SYRIAN"
+        if 'SYR' in full_text_upper or 'SYRIAN' in full_text_upper or 'SYRIA' in full_text_upper:
+            debug['nationality'] = 'SYR'
+        else:
+            return False, 'NOT_SYRIAN', debug
+    
+    if debug['nationality'] != 'SYR':
+        return False, 'NOT_SYRIAN', debug
+    
+    # ✅ كل الشروط تحققت
+    return True, 'OK', debug
+
+
 @app.route('/health', methods=['GET'])
 def health():
     return jsonify({"status": "ok"})
@@ -536,17 +574,13 @@ def extract_passport():
 
         print(f"  Extracted {len(texts)} text blocks")
 
-        # ✨ بناء items مرة وحدة
         items = build_items(ocr_results)
 
-        # ✨ المرحلة 1: ندمج fragments الـ MRZ (بحال OCR كسرها)
         merged_mrz_lines = merge_mrz_fragments(items)
         print(f"  Merged MRZ candidates: {len(merged_mrz_lines)}")
 
-        # ✨ المرحلة 2: نضيف النصوص الأصلية كمان
         all_mrz_candidates = merged_mrz_lines + [clean_mrz_line(t) for t in texts]
 
-        # نزيل التكرارات والفارغ
         seen = set()
         unique_candidates = []
         for c in all_mrz_candidates:
@@ -554,14 +588,38 @@ def extract_passport():
                 seen.add(c)
                 unique_candidates.append(c)
 
-        # ✨ المرحلة 3: parse MRZ
         mrz = parse_mrz_lines(unique_candidates)
         print(f"  MRZ extracted: {list(mrz.keys())}")
 
-        # ✨ المرحلة 4: visual zone fallback
         result = parse_visual_zone(ocr_results, mrz)
         print(f"  After visual zone: {list(result.keys())}")
 
+        # ═══════════════════════════════════════════════════
+        # ✨ التحقق الصارم من جواز السفر السوري
+        # ═══════════════════════════════════════════════════
+        is_valid, rejection_code, debug_info = validate_syrian_passport(
+            ocr_results, unique_candidates, mrz, result
+        )
+        
+        print(f"  [VALIDATION] is_valid={is_valid}, code={rejection_code}")
+        print(f"  [VALIDATION] debug: {debug_info}")
+        
+        if not is_valid:
+            # ✨ نرجع 200 بس مع علم rejected ورسالة عربية
+            return jsonify({
+                "confidence": 0,
+                "rejected": True,
+                "rejection_code": rejection_code,
+                "rejection_message": REJECTION_MESSAGES.get(
+                    rejection_code,
+                    'الصورة المرفوعة غير صالحة. تأكد من أنها جواز سفر سوري.'
+                ),
+                "debug": debug_info,  # مفيد للـ logs
+            })
+        
+        # ═══════════════════════════════════════════════════
+        # حساب الـ confidence (الكود الأصلي)
+        # ═══════════════════════════════════════════════════
         key_fields = [
             'full_name_en', 'passport_number', 'nationality', 'gender',
             'date_of_birth', 'issue_date', 'expiry_date'
@@ -571,9 +629,10 @@ def extract_passport():
 
         result['confidence'] = round(min(avg_conf * 0.4 + (found / len(key_fields)) * 0.6, 0.95), 2)
         result['needs_review'] = bool(result['confidence'] < 0.6 or found < 4)
+        result['rejected'] = False  # ✨ تأكيد إنه مش مرفوض
 
         print(f"  Fields: {found}/{len(key_fields)}, confidence: {result['confidence']}")
-        printable = {k: v for k, v in result.items() if k != 'needs_review'}
+        printable = {k: v for k, v in result.items() if k not in ('needs_review', 'rejected')}
         print(f"  Result: {json.dumps(printable, ensure_ascii=False)}")
 
         return jsonify(result)
